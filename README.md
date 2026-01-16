@@ -20,7 +20,7 @@ A Home Assistant custom component for tracking energy and water usage from [Taco
 
 1. Open HACS in Home Assistant
 2. Click the three dots menu and select "Custom repositories"
-3. Add this repository URL and select "Integration" as the category
+3. Add `https://github.com/thetic/mytpu` and select "Integration" as the category
 4. Click "Add"
 5. Search for "Tacoma Public Utilities" and install it
 6. Restart Home Assistant
