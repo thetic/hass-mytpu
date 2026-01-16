@@ -86,7 +86,7 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Fetch power usage if configured
             if self.power_service:
                 power_readings = await self.client.get_power_usage(
-                    meter_number=self.power_service["meter_number"],
+                    device_location=self.power_service["device_location"],
                     service_id=self.power_service["service_id"],
                     service_number=self.power_service["service_number"],
                 )
@@ -113,7 +113,7 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Fetch water usage if configured
             if self.water_service:
                 water_readings = await self.client.get_water_usage(
-                    meter_number=self.water_service["meter_number"],
+                    device_location=self.water_service["device_location"],
                     service_id=self.water_service["service_id"],
                     service_number=self.water_service["service_number"],
                 )

@@ -149,7 +149,7 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
         """Serialize a service to JSON for storage."""
         return json.dumps(
             {
-                "meter_number": service.meter_number,
+                "device_location": service.device_location,
                 "service_id": service.service_id,
                 "service_number": service.service_number,
             }

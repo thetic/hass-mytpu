@@ -49,8 +49,8 @@ class Service:
     service_id: str
     service_number: str
     meter_number: str
+    device_location: str
     service_type: ServiceType
-    address: str
 
     @classmethod
     def from_api_response(cls, data: dict) -> "Service":
@@ -59,6 +59,6 @@ class Service:
             service_id=data.get("serviceId", ""),
             service_number=data.get("serviceNumber", ""),
             meter_number=data.get("meterNumber", ""),
+            device_location=data.get("deviceLocation", ""),
             service_type=ServiceType(data.get("serviceType", "P")),
-            address=data.get("serviceAddress", ""),
         )

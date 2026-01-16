@@ -88,19 +88,15 @@ class MyTPUClient:
         result = await self._request("POST", "/rest/account/customer/", data)
         self._account_context = result.get("accountContext", {})
 
-        # Extract services from response
-        services_data = result.get("customerServices", [])
+        # Extract services from accountSummaryType.services
+        account_summary = result.get("accountSummaryType", {})
+        services_data = account_summary.get("services", [])
         self._services = []
         for svc in services_data:
-            self._services.append(
-                Service(
-                    service_id=svc.get("serviceId", ""),
-                    service_number=svc.get("serviceNumber", ""),
-                    meter_number=svc.get("meterNumber", ""),
-                    service_type=ServiceType(svc.get("serviceType", "P")),
-                    address=svc.get("serviceAddress", ""),
-                )
-            )
+            # Only include active services
+            if svc.get("activeServiceInd") != "Y":
+                continue
+            self._services.append(Service.from_api_response(svc))
 
         return result
 
@@ -113,7 +109,7 @@ class MyTPUClient:
     async def get_usage(
         self,
         service_type: ServiceType,
-        meter_number: str,
+        device_location: str,
         service_id: str,
         service_number: str,
         from_date: datetime | None = None,
@@ -123,7 +119,7 @@ class MyTPUClient:
 
         Args:
             service_type: Type of service (POWER or WATER)
-            meter_number: The meter number
+            device_location: The device location ID (used as meterNumber in API)
             service_id: The service ID
             service_number: The service number
             from_date: Start date for data (default: 30 days ago)
@@ -144,7 +140,7 @@ class MyTPUClient:
             "customerId": self._auth.customer_id,
             "fromDate": from_date.strftime("%Y-%m-%d %H:%M"),
             "toDate": to_date.strftime("%Y-%m-%d %H:%M"),
-            "meterNumber": meter_number,
+            "meterNumber": device_location,
             "serviceNumber": service_number,
             "serviceId": service_id,
             "serviceType": service_type.value,
@@ -163,7 +159,7 @@ class MyTPUClient:
 
     async def get_power_usage(
         self,
-        meter_number: str,
+        device_location: str,
         service_id: str,
         service_number: str,
         from_date: datetime | None = None,
@@ -172,7 +168,7 @@ class MyTPUClient:
         """Convenience method to fetch power usage."""
         return await self.get_usage(
             ServiceType.POWER,
-            meter_number,
+            device_location,
             service_id,
             service_number,
             from_date,
@@ -181,7 +177,7 @@ class MyTPUClient:
 
     async def get_water_usage(
         self,
-        meter_number: str,
+        device_location: str,
         service_id: str,
         service_number: str,
         from_date: datetime | None = None,
@@ -190,7 +186,7 @@ class MyTPUClient:
         """Convenience method to fetch water usage."""
         return await self.get_usage(
             ServiceType.WATER,
-            meter_number,
+            device_location,
             service_id,
             service_number,
             from_date,
