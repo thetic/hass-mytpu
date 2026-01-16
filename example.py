@@ -27,7 +27,9 @@ async def main():
         services = await client.get_services()
         print(f"\nFound {len(services)} service(s):")
         for svc in services:
-            print(f"  - {svc.service_type.name}: Meter {svc.meter_number} ({svc.address})")
+            print(
+                f"  - {svc.service_type.name}: Meter {svc.meter_number} ({svc.address})"
+            )
 
         # Fetch power usage for the last 7 days
         # Replace these values with your actual meter info from get_services()
@@ -46,7 +48,9 @@ async def main():
 
         print(f"Got {len(readings)} readings:")
         for reading in readings[-5:]:  # Show last 5
-            print(f"  {reading.date.strftime('%Y-%m-%d')}: {reading.consumption:.2f} {reading.unit}")
+            print(
+                f"  {reading.date.strftime('%Y-%m-%d')}: {reading.consumption:.2f} {reading.unit}"
+            )
 
         # Fetch water usage
         water_meter = "11189080"  # Your water meter number
@@ -63,7 +67,9 @@ async def main():
 
         print(f"Got {len(water_readings)} readings:")
         for reading in water_readings[-5:]:  # Show last 5
-            print(f"  {reading.date.strftime('%Y-%m-%d')}: {reading.consumption:.2f} {reading.unit}")
+            print(
+                f"  {reading.date.strftime('%Y-%m-%d')}: {reading.consumption:.2f} {reading.unit}"
+            )
 
 
 if __name__ == "__main__":

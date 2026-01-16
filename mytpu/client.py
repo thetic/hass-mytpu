@@ -1,16 +1,16 @@
 """MyTPU API client."""
 
 from datetime import datetime, timedelta
-from typing import Optional
 
 import aiohttp
 
-from .auth import MyTPUAuth, BASE_URL
+from .auth import BASE_URL, MyTPUAuth
 from .models import Service, ServiceType, UsageReading
 
 
 class MyTPUError(Exception):
     """API error from MyTPU."""
+
     pass
 
 
@@ -25,9 +25,9 @@ class MyTPUClient:
             password: MyTPU account password
         """
         self._auth = MyTPUAuth(username, password)
-        self._session: Optional[aiohttp.ClientSession] = None
-        self._account_context: Optional[dict] = None
-        self._services: Optional[list[Service]] = None
+        self._session: aiohttp.ClientSession | None = None
+        self._account_context: dict | None = None
+        self._services: list[Service] | None = None
 
     async def __aenter__(self) -> "MyTPUClient":
         """Enter async context."""
@@ -46,7 +46,9 @@ class MyTPUClient:
             self._session = aiohttp.ClientSession()
         return self._session
 
-    async def _request(self, method: str, endpoint: str, json_data: Optional[dict] = None) -> dict:
+    async def _request(
+        self, method: str, endpoint: str, json_data: dict | None = None
+    ) -> dict:
         """Make an authenticated API request."""
         session = await self._ensure_session()
         auth_header = await self._auth.get_auth_header(session)
@@ -59,7 +61,9 @@ class MyTPUClient:
 
         url = f"{BASE_URL}{endpoint}"
 
-        async with session.request(method, url, json=json_data, headers=headers) as resp:
+        async with session.request(
+            method, url, json=json_data, headers=headers
+        ) as resp:
             if resp.status != 200:
                 text = await resp.text()
                 raise MyTPUError(f"API request failed: {resp.status} - {text}")
@@ -88,13 +92,15 @@ class MyTPUClient:
         services_data = result.get("customerServices", [])
         self._services = []
         for svc in services_data:
-            self._services.append(Service(
-                service_id=svc.get("serviceId", ""),
-                service_number=svc.get("serviceNumber", ""),
-                meter_number=svc.get("meterNumber", ""),
-                service_type=ServiceType(svc.get("serviceType", "P")),
-                address=svc.get("serviceAddress", ""),
-            ))
+            self._services.append(
+                Service(
+                    service_id=svc.get("serviceId", ""),
+                    service_number=svc.get("serviceNumber", ""),
+                    meter_number=svc.get("meterNumber", ""),
+                    service_type=ServiceType(svc.get("serviceType", "P")),
+                    address=svc.get("serviceAddress", ""),
+                )
+            )
 
         return result
 
@@ -110,8 +116,8 @@ class MyTPUClient:
         meter_number: str,
         service_id: str,
         service_number: str,
-        from_date: Optional[datetime] = None,
-        to_date: Optional[datetime] = None,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
     ) -> list[UsageReading]:
         """Fetch usage data for a specific meter.
 
@@ -160,8 +166,8 @@ class MyTPUClient:
         meter_number: str,
         service_id: str,
         service_number: str,
-        from_date: Optional[datetime] = None,
-        to_date: Optional[datetime] = None,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
     ) -> list[UsageReading]:
         """Convenience method to fetch power usage."""
         return await self.get_usage(
@@ -178,8 +184,8 @@ class MyTPUClient:
         meter_number: str,
         service_id: str,
         service_number: str,
-        from_date: Optional[datetime] = None,
-        to_date: Optional[datetime] = None,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
     ) -> list[UsageReading]:
         """Convenience method to fetch water usage."""
         return await self.get_usage(

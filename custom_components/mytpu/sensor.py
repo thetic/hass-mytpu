@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -18,9 +17,9 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import TPUDataUpdateCoordinator
 from .const import (
-    DOMAIN,
     CONF_POWER_METER,
     CONF_WATER_METER,
+    DOMAIN,
 )
 
 

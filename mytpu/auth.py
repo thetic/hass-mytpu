@@ -3,10 +3,8 @@
 import re
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 import aiohttp
-
 
 BASE_URL = "https://myaccount.mytpu.org"
 
@@ -14,6 +12,7 @@ BASE_URL = "https://myaccount.mytpu.org"
 @dataclass
 class TokenInfo:
     """OAuth2 token information."""
+
     access_token: str
     refresh_token: str
     expires_at: float
@@ -27,6 +26,7 @@ class TokenInfo:
 
 class AuthError(Exception):
     """Authentication error."""
+
     pass
 
 
@@ -36,11 +36,11 @@ class MyTPUAuth:
     def __init__(self, username: str, password: str):
         self._username = username
         self._password = password
-        self._token: Optional[TokenInfo] = None
-        self._oauth_basic_token: Optional[str] = None
+        self._token: TokenInfo | None = None
+        self._oauth_basic_token: str | None = None
 
     @property
-    def customer_id(self) -> Optional[str]:
+    def customer_id(self) -> str | None:
         """Get the customer ID from the token."""
         return self._token.customer_id if self._token else None
 

@@ -1,13 +1,14 @@
 """Data models for MyTPU API responses."""
 
+import contextlib
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
 
 class ServiceType(Enum):
     """Type of utility service."""
+
     POWER = "P"
     WATER = "W"
 
@@ -15,22 +16,21 @@ class ServiceType(Enum):
 @dataclass
 class UsageReading:
     """A single usage reading from the meter."""
+
     date: datetime
     consumption: float
     unit: str
-    high_temp: Optional[float] = None
-    low_temp: Optional[float] = None
-    demand_peak_time: Optional[datetime] = None
+    high_temp: float | None = None
+    low_temp: float | None = None
+    demand_peak_time: datetime | None = None
 
     @classmethod
     def from_api_response(cls, data: dict) -> "UsageReading":
         """Create a UsageReading from API response data."""
         peak_time = None
         if data.get("demandPeakTime"):
-            try:
+            with contextlib.suppress(ValueError, TypeError):
                 peak_time = datetime.strptime(data["demandPeakTime"], "%Y-%m-%d %H:%M")
-            except (ValueError, TypeError):
-                pass
 
         return cls(
             date=datetime.strptime(data["usageDate"], "%Y-%m-%d"),
@@ -45,6 +45,7 @@ class UsageReading:
 @dataclass
 class Service:
     """A utility service (meter) on the account."""
+
     service_id: str
     service_number: str
     meter_number: str

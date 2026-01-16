@@ -3,35 +3,34 @@
 from __future__ import annotations
 
 import logging
+
+# Import the mytpu library
+import sys
+from pathlib import Path
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import (
-    DOMAIN,
     CONF_POWER_METER,
     CONF_POWER_SERVICE_ID,
     CONF_POWER_SERVICE_NUMBER,
     CONF_WATER_METER,
     CONF_WATER_SERVICE_ID,
     CONF_WATER_SERVICE_NUMBER,
+    DOMAIN,
 )
-
-# Import the mytpu library
-import sys
-from pathlib import Path
 
 _lib_path = Path(__file__).parent.parent.parent.parent
 if str(_lib_path) not in sys.path:
     sys.path.insert(0, str(_lib_path))
 
-from mytpu import MyTPUClient
-from mytpu.auth import AuthError
+from mytpu import MyTPUClient  # noqa: E402
+from mytpu.auth import AuthError  # noqa: E402
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -54,14 +53,18 @@ STEP_METERS_DATA_SCHEMA = vol.Schema(
 )
 
 
-async def validate_credentials(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
+async def validate_credentials(
+    hass: HomeAssistant, data: dict[str, Any]
+) -> dict[str, Any]:
     """Validate the user credentials."""
     client = MyTPUClient(data[CONF_USERNAME], data[CONF_PASSWORD])
 
     try:
         async with client:
             account_info = await client.get_account_info()
-            account_holder = account_info.get("accountContext", {}).get("accountHolder", "Unknown")
+            account_holder = account_info.get("accountContext", {}).get(
+                "accountHolder", "Unknown"
+            )
             return {"title": f"TPU - {account_holder}"}
     except AuthError as err:
         raise InvalidAuth from err
@@ -113,7 +116,9 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
             self._data.update(user_input)
 
             # Ensure at least one meter is configured
-            if not user_input.get(CONF_POWER_METER) and not user_input.get(CONF_WATER_METER):
+            if not user_input.get(CONF_POWER_METER) and not user_input.get(
+                CONF_WATER_METER
+            ):
                 return self.async_show_form(
                     step_id="meters",
                     data_schema=STEP_METERS_DATA_SCHEMA,
