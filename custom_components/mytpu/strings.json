@@ -1,0 +1,35 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Tacoma Public Utilities",
+        "description": "Enter your MyTPU account credentials.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "meters": {
+        "title": "Meter Configuration",
+        "description": "Enter your meter information. You can find this in your MyTPU account under Usage. At least one meter must be configured.",
+        "data": {
+          "power_meter": "Power Meter Number",
+          "power_service_id": "Power Service ID",
+          "power_service_number": "Power Service Number",
+          "water_meter": "Water Meter Number",
+          "water_service_id": "Water Service ID",
+          "water_service_number": "Water Service Number"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to MyTPU",
+      "invalid_auth": "Invalid username or password",
+      "no_meters": "At least one meter must be configured",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "Account is already configured"
+    }
+  }
+}

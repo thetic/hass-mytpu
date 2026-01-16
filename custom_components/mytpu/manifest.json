@@ -1,0 +1,13 @@
+{
+  "domain": "mytpu",
+  "name": "Tacoma Public Utilities",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/chadcondon/mytpu",
+  "homeassistant": "2025.12.0",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/chadcondon/mytpu/issues",
+  "requirements": ["aiohttp>=3.8.0"],
+  "version": "0.1.0"
+}
