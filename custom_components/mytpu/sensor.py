@@ -17,8 +17,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import TPUDataUpdateCoordinator
 from .const import (
-    CONF_POWER_METER,
-    CONF_WATER_METER,
+    CONF_POWER_SERVICE,
+    CONF_WATER_SERVICE,
     DOMAIN,
 )
 
@@ -34,11 +34,11 @@ async def async_setup_entry(
     entities: list[SensorEntity] = []
 
     # Add power sensor if configured
-    if entry.data.get(CONF_POWER_METER):
+    if entry.data.get(CONF_POWER_SERVICE):
         entities.append(TPUEnergySensor(coordinator, entry))
 
     # Add water sensor if configured
-    if entry.data.get(CONF_WATER_METER):
+    if entry.data.get(CONF_WATER_SERVICE):
         entities.append(TPUWaterSensor(coordinator, entry))
 
     async_add_entities(entities)
@@ -78,7 +78,6 @@ class TPUEnergySensor(CoordinatorEntity[TPUDataUpdateCoordinator], SensorEntity)
             power_data = self.coordinator.data["power"]
             attrs["last_reading_date"] = power_data["date"].isoformat()
             attrs["last_reading_consumption"] = power_data["consumption"]
-            attrs["meter_number"] = self._entry.data.get(CONF_POWER_METER)
         return attrs
 
 
@@ -116,5 +115,4 @@ class TPUWaterSensor(CoordinatorEntity[TPUDataUpdateCoordinator], SensorEntity):
             water_data = self.coordinator.data["water"]
             attrs["last_reading_date"] = water_data["date"].isoformat()
             attrs["last_reading_consumption"] = water_data["consumption"]
-            attrs["meter_number"] = self._entry.data.get(CONF_WATER_METER)
         return attrs
