@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -13,15 +14,8 @@ from homeassistant.exceptions import HomeAssistantError
 
 from .auth import AuthError
 from .client import MyTPUClient
-from .const import (
-    CONF_POWER_METER,
-    CONF_POWER_SERVICE_ID,
-    CONF_POWER_SERVICE_NUMBER,
-    CONF_WATER_METER,
-    CONF_WATER_SERVICE_ID,
-    CONF_WATER_SERVICE_NUMBER,
-    DOMAIN,
-)
+from .const import CONF_POWER_SERVICE, CONF_WATER_SERVICE, DOMAIN
+from .models import Service, ServiceType
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,22 +26,11 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     }
 )
 
-STEP_METERS_DATA_SCHEMA = vol.Schema(
-    {
-        vol.Optional(CONF_POWER_METER): str,
-        vol.Optional(CONF_POWER_SERVICE_ID): str,
-        vol.Optional(CONF_POWER_SERVICE_NUMBER): str,
-        vol.Optional(CONF_WATER_METER): str,
-        vol.Optional(CONF_WATER_SERVICE_ID): str,
-        vol.Optional(CONF_WATER_SERVICE_NUMBER): str,
-    }
-)
 
-
-async def validate_credentials(
+async def validate_and_fetch_services(
     hass: HomeAssistant, data: dict[str, Any]
-) -> dict[str, Any]:
-    """Validate the user credentials."""
+) -> tuple[dict[str, Any], list[Service]]:
+    """Validate credentials and fetch available services."""
     client = MyTPUClient(data[CONF_USERNAME], data[CONF_PASSWORD])
 
     try:
@@ -56,7 +39,8 @@ async def validate_credentials(
             account_holder = account_info.get("accountContext", {}).get(
                 "accountHolder", "Unknown"
             )
-            return {"title": f"TPU - {account_holder}"}
+            services = await client.get_services()
+            return {"title": f"TPU - {account_holder}"}, services
     except AuthError as err:
         raise InvalidAuth from err
     except Exception as err:
@@ -72,6 +56,7 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         """Initialize the config flow."""
         self._data: dict[str, Any] = {}
+        self._services: list[Service] = []
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -81,9 +66,12 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             try:
-                info = await validate_credentials(self.hass, user_input)
+                info, services = await validate_and_fetch_services(
+                    self.hass, user_input
+                )
                 self._data = user_input
                 self._data["title"] = info["title"]
+                self._services = services
                 return await self.async_step_meters()
             except CannotConnect:
                 errors["base"] = "cannot_connect"
@@ -102,17 +90,21 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_meters(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Handle the meters configuration step."""
+        """Handle the meters selection step."""
         if user_input is not None:
-            self._data.update(user_input)
+            # Store selected services as JSON
+            if user_input.get(CONF_POWER_SERVICE):
+                self._data[CONF_POWER_SERVICE] = user_input[CONF_POWER_SERVICE]
+            if user_input.get(CONF_WATER_SERVICE):
+                self._data[CONF_WATER_SERVICE] = user_input[CONF_WATER_SERVICE]
 
             # Ensure at least one meter is configured
-            if not user_input.get(CONF_POWER_METER) and not user_input.get(
-                CONF_WATER_METER
+            if not self._data.get(CONF_POWER_SERVICE) and not self._data.get(
+                CONF_WATER_SERVICE
             ):
                 return self.async_show_form(
                     step_id="meters",
-                    data_schema=STEP_METERS_DATA_SCHEMA,
+                    data_schema=self._build_meters_schema(),
                     errors={"base": "no_meters"},
                 )
 
@@ -123,7 +115,44 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="meters",
-            data_schema=STEP_METERS_DATA_SCHEMA,
+            data_schema=self._build_meters_schema(),
+        )
+
+    def _build_meters_schema(self) -> vol.Schema:
+        """Build the meters selection schema based on available services."""
+        power_meters = [
+            s for s in self._services if s.service_type == ServiceType.POWER
+        ]
+        water_meters = [
+            s for s in self._services if s.service_type == ServiceType.WATER
+        ]
+
+        schema_dict: dict[Any, Any] = {}
+
+        if power_meters:
+            power_options = {
+                self._service_to_json(s): f"{s.meter_number} ({s.address})"
+                for s in power_meters
+            }
+            schema_dict[vol.Optional(CONF_POWER_SERVICE)] = vol.In(power_options)
+
+        if water_meters:
+            water_options = {
+                self._service_to_json(s): f"{s.meter_number} ({s.address})"
+                for s in water_meters
+            }
+            schema_dict[vol.Optional(CONF_WATER_SERVICE)] = vol.In(water_options)
+
+        return vol.Schema(schema_dict)
+
+    def _service_to_json(self, service: Service) -> str:
+        """Serialize a service to JSON for storage."""
+        return json.dumps(
+            {
+                "meter_number": service.meter_number,
+                "service_id": service.service_id,
+                "service_number": service.service_number,
+            }
         )
 
 
