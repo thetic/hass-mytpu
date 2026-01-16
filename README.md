@@ -18,6 +18,10 @@ A Home Assistant custom component for tracking energy and water usage from [Taco
 
 ### HACS (Recommended)
 
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=thetic&repository=hass-mytpu&category=integration)
+
+Or manually:
+
 1. Open HACS in Home Assistant
 2. Click the three dots menu and select "Custom repositories"
 3. Add `https://github.com/thetic/hass-mytpu` and select "Integration" as the category
