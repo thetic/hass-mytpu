@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import aiohttp
 
 from .auth import BASE_URL, MyTPUAuth
-from .models import Service, ServiceType, UsageReading
+from .models import Service, UsageReading
 
 
 class MyTPUError(Exception):
@@ -88,15 +88,13 @@ class MyTPUClient:
         result = await self._request("POST", "/rest/account/customer/", data)
         self._account_context = result.get("accountContext", {})
 
-        # Extract services from accountSummaryType.services
+        # Extract services from accountSummaryType.servicesForGraph
+        # This contains the correct meter/service IDs needed for usage API
         account_summary = result.get("accountSummaryType", {})
-        services_data = account_summary.get("services", [])
+        services_data = account_summary.get("servicesForGraph", [])
         self._services = []
         for svc in services_data:
-            # Only include active services
-            if svc.get("activeServiceInd") != "Y":
-                continue
-            self._services.append(Service.from_api_response(svc))
+            self._services.append(Service.from_graph_response(svc))
 
         return result
 
@@ -108,20 +106,14 @@ class MyTPUClient:
 
     async def get_usage(
         self,
-        service_type: ServiceType,
-        device_location: str,
-        service_id: str,
-        service_number: str,
+        service: Service,
         from_date: datetime | None = None,
         to_date: datetime | None = None,
     ) -> list[UsageReading]:
         """Fetch usage data for a specific meter.
 
         Args:
-            service_type: Type of service (POWER or WATER)
-            device_location: The device location ID (used as meterNumber in API)
-            service_id: The service ID
-            service_number: The service number
+            service: The Service object containing meter details
             from_date: Start date for data (default: 30 days ago)
             to_date: End date for data (default: today)
 
@@ -140,12 +132,23 @@ class MyTPUClient:
             "customerId": self._auth.customer_id,
             "fromDate": from_date.strftime("%Y-%m-%d %H:%M"),
             "toDate": to_date.strftime("%Y-%m-%d %H:%M"),
-            "meterNumber": device_location,
-            "serviceNumber": service_number,
-            "serviceId": service_id,
-            "serviceType": service_type.value,
+            "meterNumber": service.meter_number,
+            "serviceNumber": service.service_number,
+            "serviceId": service.service_id,
+            "serviceType": service.service_type.value,
             "accountContext": self._account_context,
+            "meterIds": [service.service_id],
         }
+
+        # Add optional fields if available
+        if service.latitude:
+            data["latitude"] = service.latitude
+        if service.longitude:
+            data["longitude"] = service.longitude
+        if service.contract_number:
+            data["contractNum"] = service.contract_number
+        if service.totalizer:
+            data["totalizerInd"] = "Y"
 
         result = await self._request("POST", "/rest/usage/month", data)
 
@@ -159,39 +162,21 @@ class MyTPUClient:
 
     async def get_power_usage(
         self,
-        device_location: str,
-        service_id: str,
-        service_number: str,
+        service: Service,
         from_date: datetime | None = None,
         to_date: datetime | None = None,
     ) -> list[UsageReading]:
         """Convenience method to fetch power usage."""
-        return await self.get_usage(
-            ServiceType.POWER,
-            device_location,
-            service_id,
-            service_number,
-            from_date,
-            to_date,
-        )
+        return await self.get_usage(service, from_date, to_date)
 
     async def get_water_usage(
         self,
-        device_location: str,
-        service_id: str,
-        service_number: str,
+        service: Service,
         from_date: datetime | None = None,
         to_date: datetime | None = None,
     ) -> list[UsageReading]:
         """Convenience method to fetch water usage."""
-        return await self.get_usage(
-            ServiceType.WATER,
-            device_location,
-            service_id,
-            service_number,
-            from_date,
-            to_date,
-        )
+        return await self.get_usage(service, from_date, to_date)
 
     async def close(self) -> None:
         """Close the client session."""

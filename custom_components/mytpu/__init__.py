@@ -14,10 +14,27 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .client import MyTPUClient
 from .const import CONF_POWER_SERVICE, CONF_WATER_SERVICE, DOMAIN, UPDATE_INTERVAL_HOURS
+from .models import Service, ServiceType
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
+
+
+def _service_from_config(config_json: str) -> Service:
+    """Reconstruct a Service object from stored JSON config."""
+    data = json.loads(config_json)
+    return Service(
+        service_id=data["service_id"],
+        service_number=data["service_number"],
+        meter_number=data["meter_number"],
+        display_meter_number=data["display_meter_number"],
+        service_type=ServiceType(data["service_type"]),
+        latitude=data.get("latitude"),
+        longitude=data.get("longitude"),
+        contract_number=data.get("contract_number"),
+        totalizer=data.get("totalizer", False),
+    )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -68,12 +85,12 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.config = config
 
         # Parse service configs from JSON
-        self.power_service = None
-        self.water_service = None
+        self.power_service: Service | None = None
+        self.water_service: Service | None = None
         if config.get(CONF_POWER_SERVICE):
-            self.power_service = json.loads(config[CONF_POWER_SERVICE])
+            self.power_service = _service_from_config(config[CONF_POWER_SERVICE])
         if config.get(CONF_WATER_SERVICE):
-            self.water_service = json.loads(config[CONF_WATER_SERVICE])
+            self.water_service = _service_from_config(config[CONF_WATER_SERVICE])
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from TPU."""
@@ -85,11 +102,7 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             # Fetch power usage if configured
             if self.power_service:
-                power_readings = await self.client.get_power_usage(
-                    device_location=self.power_service["device_location"],
-                    service_id=self.power_service["service_id"],
-                    service_number=self.power_service["service_number"],
-                )
+                power_readings = await self.client.get_power_usage(self.power_service)
                 if power_readings:
                     # Get the most recent complete day's reading
                     # (today's reading may be incomplete)
@@ -112,11 +125,7 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             # Fetch water usage if configured
             if self.water_service:
-                water_readings = await self.client.get_water_usage(
-                    device_location=self.water_service["device_location"],
-                    service_id=self.water_service["service_id"],
-                    service_number=self.water_service["service_number"],
-                )
+                water_readings = await self.client.get_water_usage(self.water_service)
                 if water_readings:
                     latest = water_readings[-1]
                     if len(water_readings) > 1:

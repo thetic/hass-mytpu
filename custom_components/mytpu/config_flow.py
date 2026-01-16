@@ -131,13 +131,13 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if power_meters:
             power_options = {
-                self._service_to_json(s): s.meter_number for s in power_meters
+                self._service_to_json(s): s.display_meter_number for s in power_meters
             }
             schema_dict[vol.Optional(CONF_POWER_SERVICE)] = vol.In(power_options)
 
         if water_meters:
             water_options = {
-                self._service_to_json(s): s.meter_number for s in water_meters
+                self._service_to_json(s): s.display_meter_number for s in water_meters
             }
             schema_dict[vol.Optional(CONF_WATER_SERVICE)] = vol.In(water_options)
 
@@ -147,9 +147,15 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
         """Serialize a service to JSON for storage."""
         return json.dumps(
             {
-                "device_location": service.device_location,
                 "service_id": service.service_id,
                 "service_number": service.service_number,
+                "meter_number": service.meter_number,
+                "display_meter_number": service.display_meter_number,
+                "service_type": service.service_type.value,
+                "latitude": service.latitude,
+                "longitude": service.longitude,
+                "contract_number": service.contract_number,
+                "totalizer": service.totalizer,
             }
         )
 

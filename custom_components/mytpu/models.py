@@ -49,16 +49,26 @@ class Service:
     service_id: str
     service_number: str
     meter_number: str
-    device_location: str
+    display_meter_number: str
     service_type: ServiceType
+    latitude: str | None = None
+    longitude: str | None = None
+    contract_number: str | None = None
+    totalizer: bool = False
 
     @classmethod
-    def from_api_response(cls, data: dict) -> "Service":
-        """Create a Service from API response data."""
+    def from_graph_response(cls, data: dict) -> "Service":
+        """Create a Service from servicesForGraph API response data."""
         return cls(
             service_id=data.get("serviceId", ""),
             service_number=data.get("serviceNumber", ""),
             meter_number=data.get("meterNumber", ""),
-            device_location=data.get("deviceLocation", ""),
+            display_meter_number=data.get(
+                "exportMeterNum", data.get("meterNumber", "")
+            ),
             service_type=ServiceType(data.get("serviceType", "P")),
+            latitude=data.get("latitude"),
+            longitude=data.get("longitude"),
+            contract_number=data.get("serviceContract"),
+            totalizer=data.get("totalizerMeter") == "Y",
         )
