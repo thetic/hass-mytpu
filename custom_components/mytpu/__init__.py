@@ -3,11 +3,7 @@
 from __future__ import annotations
 
 import logging
-
-# Import the mytpu library from the parent package
-import sys
 from datetime import timedelta
-from pathlib import Path
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -15,6 +11,7 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+from .client import MyTPUClient
 from .const import (
     CONF_POWER_METER,
     CONF_POWER_SERVICE_ID,
@@ -25,13 +22,6 @@ from .const import (
     DOMAIN,
     UPDATE_INTERVAL_HOURS,
 )
-
-# Add the parent directory to the path so we can import mytpu
-_lib_path = Path(__file__).parent.parent.parent.parent
-if str(_lib_path) not in sys.path:
-    sys.path.insert(0, str(_lib_path))
-
-from mytpu import MyTPUClient  # noqa: E402
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -3,10 +3,6 @@
 from __future__ import annotations
 
 import logging
-
-# Import the mytpu library
-import sys
-from pathlib import Path
 from typing import Any
 
 import voluptuous as vol
@@ -15,6 +11,8 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
+from .auth import AuthError
+from .client import MyTPUClient
 from .const import (
     CONF_POWER_METER,
     CONF_POWER_SERVICE_ID,
@@ -24,13 +22,6 @@ from .const import (
     CONF_WATER_SERVICE_NUMBER,
     DOMAIN,
 )
-
-_lib_path = Path(__file__).parent.parent.parent.parent
-if str(_lib_path) not in sys.path:
-    sys.path.insert(0, str(_lib_path))
-
-from mytpu import MyTPUClient  # noqa: E402
-from mytpu.auth import AuthError  # noqa: E402
 
 _LOGGER = logging.getLogger(__name__)
 
