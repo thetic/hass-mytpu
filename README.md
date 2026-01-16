@@ -89,6 +89,10 @@ async with MyTPUClient("username", "password") as client:
         print(f"{r.date}: {r.consumption} {r.unit}")
 ```
 
+## Acknowledgments
+
+This project was inspired by and builds upon the work of [ex-nerd/mytpu](https://github.com/ex-nerd/mytpu), which provided valuable insights into the MyTPU API authentication flow.
+
 ## License
 
 MIT
