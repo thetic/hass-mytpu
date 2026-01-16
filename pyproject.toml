@@ -2,37 +2,47 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[dependency-groups]
+dev = ["pytest>=7.0", "pytest-asyncio>=0.21", "ruff"]
+
 [project]
 name = "mytpu"
 version = "0.1.0"
 description = "Python library for Tacoma Public Utilities (TPU) API"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = "MIT"
 keywords = ["tacoma", "utilities", "energy", "water", "home-assistant"]
-authors = [
-    { name = "Chad Condon" }
-]
+authors = [{ name = "Chad Condon" }]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
-dependencies = [
-    "aiohttp>=3.8.0",
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0",
-    "pytest-asyncio>=0.21",
-    "pytest-aiohttp>=1.0",
-]
+dependencies = ["aiohttp>=3.8.0"]
 
 [project.urls]
-Homepage = "https://github.com/chadcondon/mytpu"
-Issues = "https://github.com/chadcondon/mytpu/issues"
+Homepage = "https://github.com/thetic/hass-mytpu"
+Issues = "https://github.com/thetic/hass-mytpu/issues"
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
