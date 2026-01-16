@@ -131,15 +131,13 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if power_meters:
             power_options = {
-                self._service_to_json(s): f"{s.meter_number} ({s.address})"
-                for s in power_meters
+                self._service_to_json(s): s.meter_number for s in power_meters
             }
             schema_dict[vol.Optional(CONF_POWER_SERVICE)] = vol.In(power_options)
 
         if water_meters:
             water_options = {
-                self._service_to_json(s): f"{s.meter_number} ({s.address})"
-                for s in water_meters
+                self._service_to_json(s): s.meter_number for s in water_meters
             }
             schema_dict[vol.Optional(CONF_WATER_SERVICE)] = vol.In(water_options)
 
