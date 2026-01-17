@@ -159,7 +159,9 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
 
         # Create statistic_id based on service
-        statistic_id = f"{DOMAIN}:{service.service_type.value}_{service.meter_number}"
+        # Sanitize to avoid validation errors: lowercase and replace hyphens
+        meter_id = f"{service.service_type.value}_{service.meter_number}".replace("-", "_").lower()
+        statistic_id = f"{DOMAIN}:{meter_id}_{stat_type}"
 
         # Get the last imported statistic to avoid duplicates and calculate cumulative sum
         last_stats = await self.hass.async_add_executor_job(
