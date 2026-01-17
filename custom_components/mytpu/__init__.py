@@ -160,7 +160,9 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Create statistic_id based on service
         # Sanitize to avoid validation errors: lowercase and replace hyphens
-        meter_id = f"{service.service_type.value}_{service.meter_number}".replace("-", "_").lower()
+        meter_id = f"{service.service_type.value}_{service.meter_number}".replace(
+            "-", "_"
+        ).lower()
         statistic_id = f"{DOMAIN}:{meter_id}_{stat_type}"
 
         # Get the last imported statistic to avoid duplicates and calculate cumulative sum
