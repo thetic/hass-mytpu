@@ -1,10 +1,10 @@
 {
   "domain": "mytpu",
   "name": "Tacoma Public Utilities",
+  "after_dependencies": ["recorder"],
   "codeowners": ["@thetic"],
   "config_flow": true,
   "dependencies": [],
-  "after_dependencies": ["recorder"],
   "documentation": "https://github.com/thetic/hass-mytpu",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/thetic/hass-mytpu/issues",
