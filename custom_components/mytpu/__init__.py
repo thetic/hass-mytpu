@@ -7,10 +7,26 @@ import logging
 from datetime import timedelta
 from typing import Any
 
+from homeassistant.components.recorder.models import (
+    StatisticData,
+    StatisticMeanType,
+    StatisticMetaData,
+)
+from homeassistant.components.recorder.statistics import (
+    async_add_external_statistics,
+    get_last_statistics,
+)
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
+from homeassistant.const import (
+    CONF_PASSWORD,
+    CONF_USERNAME,
+    Platform,
+    UnitOfEnergy,
+    UnitOfVolume,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .client import MyTPUClient
 from .const import CONF_POWER_SERVICE, CONF_WATER_SERVICE, DOMAIN, UPDATE_INTERVAL_HOURS
@@ -93,58 +109,114 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.water_service = _service_from_config(config[CONF_WATER_SERVICE])
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Fetch data from TPU."""
+        """Fetch data from TPU and update statistics."""
         try:
             # Ensure we have account context
             await self.client.get_account_info()
 
             data: dict[str, Any] = {}
 
-            # Fetch power usage if configured
+            # Fetch and import power usage statistics
             if self.power_service:
                 power_readings = await self.client.get_power_usage(self.power_service)
                 if power_readings:
-                    # Get the most recent complete day's reading
-                    # (today's reading may be incomplete)
+                    await self._import_statistics(
+                        self.power_service, power_readings, "energy"
+                    )
+                    # Keep latest reading in data for sensor attributes
                     latest = power_readings[-1]
-                    if len(power_readings) > 1:
-                        yesterday = power_readings[-2]
-                        data["power"] = {
-                            "consumption": yesterday.consumption,
-                            "date": yesterday.date,
-                            "unit": yesterday.unit,
-                            "total": sum(r.consumption for r in power_readings),
-                        }
-                    else:
-                        data["power"] = {
-                            "consumption": latest.consumption,
-                            "date": latest.date,
-                            "unit": latest.unit,
-                            "total": latest.consumption,
-                        }
+                    data["power"] = {
+                        "consumption": latest.consumption,
+                        "date": latest.date,
+                        "unit": latest.unit,
+                    }
 
-            # Fetch water usage if configured
+            # Fetch and import water usage statistics
             if self.water_service:
                 water_readings = await self.client.get_water_usage(self.water_service)
                 if water_readings:
+                    await self._import_statistics(
+                        self.water_service, water_readings, "water"
+                    )
+                    # Keep latest reading in data for sensor attributes
                     latest = water_readings[-1]
-                    if len(water_readings) > 1:
-                        yesterday = water_readings[-2]
-                        data["water"] = {
-                            "consumption": yesterday.consumption,
-                            "date": yesterday.date,
-                            "unit": yesterday.unit,
-                            "total": sum(r.consumption for r in water_readings),
-                        }
-                    else:
-                        data["water"] = {
-                            "consumption": latest.consumption,
-                            "date": latest.date,
-                            "unit": latest.unit,
-                            "total": latest.consumption,
-                        }
+                    data["water"] = {
+                        "consumption": latest.consumption,
+                        "date": latest.date,
+                        "unit": latest.unit,
+                    }
 
             return data
 
         except Exception as err:
             raise UpdateFailed(f"Error communicating with TPU: {err}") from err
+
+    async def _import_statistics(
+        self, service: Service, readings: list, stat_type: str
+    ) -> None:
+        """Import historical usage data as statistics."""
+        if not readings:
+            return
+
+        # Create statistic_id based on service
+        statistic_id = f"{DOMAIN}:{service.service_type.value}_{service.meter_number}"
+
+        # Get the last imported statistic to avoid duplicates and calculate cumulative sum
+        last_stats = await self.hass.async_add_executor_job(
+            get_last_statistics, self.hass, 1, statistic_id, True, {"sum"}
+        )
+
+        # Start cumulative sum from last known value or 0
+        cumulative_sum = 0.0
+        last_stat_time = None
+        if statistic_id in last_stats:
+            last_stat = last_stats[statistic_id][0]
+            cumulative_sum = last_stat.get("sum", 0.0)
+            last_stat_time = last_stat.get("start")
+
+        # Create metadata based on type
+        if stat_type == "energy":
+            metadata = StatisticMetaData(
+                mean_type=StatisticMeanType.NONE,
+                has_sum=True,
+                name=f"TPU Energy {service.display_meter_number}",
+                source=DOMAIN,
+                statistic_id=statistic_id,
+                unit_class="energy",
+                unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+            )
+        else:  # water
+            metadata = StatisticMetaData(
+                mean_type=StatisticMeanType.NONE,
+                has_sum=True,
+                name=f"TPU Water {service.display_meter_number}",
+                source=DOMAIN,
+                statistic_id=statistic_id,
+                unit_class="volume",
+                unit_of_measurement=UnitOfVolume.CENTUM_CUBIC_FEET,
+            )
+
+        # Convert readings to StatisticData
+        statistics: list[StatisticData] = []
+        for reading in readings:
+            # Convert date to UTC datetime at start of day
+            start_time = dt_util.as_utc(reading.date)
+
+            # Skip if we've already imported this date
+            if last_stat_time and start_time <= last_stat_time:
+                continue
+
+            # Add consumption to cumulative sum
+            cumulative_sum += reading.consumption
+
+            statistics.append(
+                StatisticData(
+                    start=start_time,
+                    state=reading.consumption,
+                    sum=cumulative_sum,
+                )
+            )
+
+        # Import the statistics
+        if statistics:
+            async_add_external_statistics(self.hass, metadata, statistics)

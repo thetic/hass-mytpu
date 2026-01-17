@@ -1,11 +1,14 @@
 """MyTPU API client."""
 
+import logging
 from datetime import datetime, timedelta
 
 import aiohttp
 
 from .auth import BASE_URL, MyTPUAuth
 from .models import Service, UsageReading
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class MyTPUError(Exception):

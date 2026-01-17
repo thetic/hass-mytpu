@@ -7,7 +7,6 @@ from typing import Any
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
-    SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfEnergy, UnitOfVolume
@@ -45,10 +44,13 @@ async def async_setup_entry(
 
 
 class TPUEnergySensor(CoordinatorEntity[TPUDataUpdateCoordinator], SensorEntity):
-    """Sensor for TPU power/energy consumption."""
+    """Sensor for TPU power/energy consumption.
+
+    This sensor displays the latest daily consumption value.
+    Historical data and cumulative totals are managed via statistics.
+    """
 
     _attr_device_class = SensorDeviceClass.ENERGY
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
     _attr_has_entity_name = True
     _attr_name = "Energy Consumption"
@@ -65,9 +67,9 @@ class TPUEnergySensor(CoordinatorEntity[TPUDataUpdateCoordinator], SensorEntity)
 
     @property
     def native_value(self) -> float | None:
-        """Return the total energy consumption."""
+        """Return the latest daily energy consumption."""
         if self.coordinator.data and "power" in self.coordinator.data:
-            return self.coordinator.data["power"]["total"]
+            return self.coordinator.data["power"]["consumption"]
         return None
 
     @property
@@ -77,15 +79,18 @@ class TPUEnergySensor(CoordinatorEntity[TPUDataUpdateCoordinator], SensorEntity)
         if self.coordinator.data and "power" in self.coordinator.data:
             power_data = self.coordinator.data["power"]
             attrs["last_reading_date"] = power_data["date"].isoformat()
-            attrs["last_reading_consumption"] = power_data["consumption"]
+            attrs["unit"] = power_data["unit"]
         return attrs
 
 
 class TPUWaterSensor(CoordinatorEntity[TPUDataUpdateCoordinator], SensorEntity):
-    """Sensor for TPU water consumption."""
+    """Sensor for TPU water consumption.
+
+    This sensor displays the latest daily consumption value.
+    Historical data and cumulative totals are managed via statistics.
+    """
 
     _attr_device_class = SensorDeviceClass.WATER
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_native_unit_of_measurement = UnitOfVolume.CENTUM_CUBIC_FEET
     _attr_has_entity_name = True
     _attr_name = "Water Consumption"
@@ -102,9 +107,9 @@ class TPUWaterSensor(CoordinatorEntity[TPUDataUpdateCoordinator], SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        """Return the total water consumption."""
+        """Return the latest daily water consumption."""
         if self.coordinator.data and "water" in self.coordinator.data:
-            return self.coordinator.data["water"]["total"]
+            return self.coordinator.data["water"]["consumption"]
         return None
 
     @property
@@ -114,5 +119,5 @@ class TPUWaterSensor(CoordinatorEntity[TPUDataUpdateCoordinator], SensorEntity):
         if self.coordinator.data and "water" in self.coordinator.data:
             water_data = self.coordinator.data["water"]
             attrs["last_reading_date"] = water_data["date"].isoformat()
-            attrs["last_reading_consumption"] = water_data["consumption"]
+            attrs["unit"] = water_data["unit"]
         return attrs
