@@ -1,12 +1,16 @@
 """Tests for mytpu sensor platform."""
 
+from collections.abc import Iterable
 from datetime import datetime
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
 from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.const import UnitOfEnergy, UnitOfVolume
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from custom_components.mytpu.const import CONF_POWER_SERVICE, CONF_WATER_SERVICE, DOMAIN
 from custom_components.mytpu.sensor import (
@@ -22,12 +26,12 @@ async def test_async_setup_entry_both_services(hass: HomeAssistant, mock_config_
     mock_coordinator = MagicMock()
     hass.data[DOMAIN] = {mock_config_entry.entry_id: mock_coordinator}
 
-    entities = []
+    entities: list[Entity] = []
 
-    def mock_add_entities(new_entities):
+    def mock_add_entities(new_entities: Iterable[Entity]) -> None:
         entities.extend(new_entities)
 
-    await async_setup_entry(hass, mock_config_entry, mock_add_entities)
+    await async_setup_entry(hass, mock_config_entry, cast(AddEntitiesCallback, mock_add_entities))
 
     assert len(entities) == 2
     assert isinstance(entities[0], TPUEnergySensor)
@@ -66,12 +70,12 @@ async def test_async_setup_entry_power_only(hass: HomeAssistant, mock_power_serv
     mock_coordinator = MagicMock()
     hass.data[DOMAIN] = {power_only_entry.entry_id: mock_coordinator}
 
-    entities = []
+    entities: list[Entity] = []
 
-    def mock_add_entities(new_entities):
+    def mock_add_entities(new_entities: Iterable[Entity]) -> None:
         entities.extend(new_entities)
 
-    await async_setup_entry(hass, power_only_entry, mock_add_entities)
+    await async_setup_entry(hass, power_only_entry, cast(AddEntitiesCallback, mock_add_entities))
 
     assert len(entities) == 1
     assert isinstance(entities[0], TPUEnergySensor)
@@ -109,12 +113,12 @@ async def test_async_setup_entry_water_only(hass: HomeAssistant, mock_water_serv
     mock_coordinator = MagicMock()
     hass.data[DOMAIN] = {water_only_entry.entry_id: mock_coordinator}
 
-    entities = []
+    entities: list[Entity] = []
 
-    def mock_add_entities(new_entities):
+    def mock_add_entities(new_entities: Iterable[Entity]) -> None:
         entities.extend(new_entities)
 
-    await async_setup_entry(hass, water_only_entry, mock_add_entities)
+    await async_setup_entry(hass, water_only_entry, cast(AddEntitiesCallback, mock_add_entities))
 
     assert len(entities) == 1
     assert isinstance(entities[0], TPUWaterSensor)
