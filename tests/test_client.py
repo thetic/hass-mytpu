@@ -75,6 +75,7 @@ class TestMyTPUClient:
                     assert result == mock_account_info
                     assert client._account_context is not None
                     assert client._account_context["accountHolder"] == "Test User"
+                    assert client._services is not None
                     assert len(client._services) == 2
                     assert client._services[0].meter_number == "MOCK_POWER_METER"
                     assert client._services[0].service_type == ServiceType.POWER

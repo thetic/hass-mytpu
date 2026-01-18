@@ -13,6 +13,7 @@ dev = [
     "aioresponses>=0.7.6",
     "freezegun>=1.4.0",
     "ruff",
+    "ty",
 ]
 
 [tool.ruff]

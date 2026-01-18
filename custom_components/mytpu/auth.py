@@ -48,6 +48,7 @@ class MyTPUAuth:
         """Get a valid access token, refreshing if necessary."""
         if self._token is None or self._token.is_expired:
             await self._authenticate(session)
+        assert self._token is not None
         return self._token.access_token
 
     async def _get_oauth_basic_token(self, session: aiohttp.ClientSession) -> str:

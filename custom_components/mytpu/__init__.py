@@ -4,8 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import timedelta
-from typing import Any
+from datetime import datetime, timedelta
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
 
 from homeassistant.components.recorder.models import (
     StatisticData,
@@ -16,7 +22,6 @@ from homeassistant.components.recorder.statistics import (
     async_add_external_statistics,
     get_last_statistics,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONF_PASSWORD,
     CONF_USERNAME,
@@ -24,7 +29,6 @@ from homeassistant.const import (
     UnitOfEnergy,
     UnitOfVolume,
 )
-from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -88,7 +92,7 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self,
         hass: HomeAssistant,
         client: MyTPUClient,
-        config: dict[str, Any],
+        config: Mapping[str, Any],
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
@@ -98,7 +102,7 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(hours=UPDATE_INTERVAL_HOURS),
         )
         self.client = client
-        self.config = config
+        self.config: Mapping[str, Any] = config
 
         # Parse service configs from JSON
         self.power_service: Service | None = None
@@ -172,11 +176,13 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Start cumulative sum from last known value or 0
         cumulative_sum = 0.0
-        last_stat_time = None
+        last_stat_time: datetime | None = None
         if statistic_id in last_stats:
             last_stat = last_stats[statistic_id][0]
             cumulative_sum = last_stat.get("sum", 0.0)
-            last_stat_time = last_stat.get("start")
+            start_value = last_stat.get("start")
+            if isinstance(start_value, datetime):
+                last_stat_time = start_value
 
         # Create metadata based on type
         if stat_type == "energy":
