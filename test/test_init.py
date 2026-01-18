@@ -162,7 +162,11 @@ class TestTPUDataUpdateCoordinator:
 
     @pytest.mark.asyncio
     async def test_async_update_data_success(
-        self, hass: HomeAssistant, mock_power_service, mock_water_service, mock_config_entry
+        self,
+        hass: HomeAssistant,
+        mock_power_service,
+        mock_water_service,
+        mock_config_entry,
     ):
         """Test successful data update."""
         mock_client = AsyncMock()
@@ -418,7 +422,13 @@ class TestTPUDataUpdateCoordinator:
         from pytest_homeassistant_custom_component.common import MockConfigEntry
 
         mock_client = AsyncMock()
-        config_entry = MockConfigEntry(domain=DOMAIN, version=1, data={CONF_USERNAME: "user", CONF_PASSWORD: "pass"}, unique_id="test_import2", title="Test")
+        config_entry = MockConfigEntry(
+            domain=DOMAIN,
+            version=1,
+            data={CONF_USERNAME: "user", CONF_PASSWORD: "pass"},
+            unique_id="test_import2",
+            title="Test",
+        )
         coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
         readings = [
@@ -469,7 +479,13 @@ class TestTPUDataUpdateCoordinator:
         from pytest_homeassistant_custom_component.common import MockConfigEntry
 
         mock_client = AsyncMock()
-        config_entry = MockConfigEntry(domain=DOMAIN, version=1, data={CONF_USERNAME: "user", CONF_PASSWORD: "pass"}, unique_id="test_import3", title="Test")
+        config_entry = MockConfigEntry(
+            domain=DOMAIN,
+            version=1,
+            data={CONF_USERNAME: "user", CONF_PASSWORD: "pass"},
+            unique_id="test_import3",
+            title="Test",
+        )
         coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
         readings = [
@@ -518,7 +534,13 @@ class TestTPUDataUpdateCoordinator:
         from pytest_homeassistant_custom_component.common import MockConfigEntry
 
         mock_client = AsyncMock()
-        config_entry = MockConfigEntry(domain=DOMAIN, version=1, data={CONF_USERNAME: "user", CONF_PASSWORD: "pass"}, unique_id="test_import4", title="Test")
+        config_entry = MockConfigEntry(
+            domain=DOMAIN,
+            version=1,
+            data={CONF_USERNAME: "user", CONF_PASSWORD: "pass"},
+            unique_id="test_import4",
+            title="Test",
+        )
         coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
         readings = [
@@ -555,7 +577,13 @@ class TestTPUDataUpdateCoordinator:
         from pytest_homeassistant_custom_component.common import MockConfigEntry
 
         mock_client = AsyncMock()
-        config_entry = MockConfigEntry(domain=DOMAIN, version=1, data={CONF_USERNAME: "user", CONF_PASSWORD: "pass"}, unique_id="test_import5", title="Test")
+        config_entry = MockConfigEntry(
+            domain=DOMAIN,
+            version=1,
+            data={CONF_USERNAME: "user", CONF_PASSWORD: "pass"},
+            unique_id="test_import5",
+            title="Test",
+        )
         coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
         service = Service(

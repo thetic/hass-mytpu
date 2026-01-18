@@ -173,7 +173,9 @@ class MyTPUAuth:
 
             expires_in = result.get("expires_in", 3600)
             # Keep the same customer_id and refresh_token if not provided
-            customer_id = result.get("user", {}).get("customerId", self._token.customer_id)
+            customer_id = result.get("user", {}).get(
+                "customerId", self._token.customer_id
+            )
             refresh_token = result.get("refresh_token", self._token.refresh_token)
 
             self._token = TokenInfo(

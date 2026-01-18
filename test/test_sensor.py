@@ -31,7 +31,9 @@ async def test_async_setup_entry_both_services(hass: HomeAssistant, mock_config_
     def mock_add_entities(new_entities: Iterable[Entity]) -> None:
         entities.extend(new_entities)
 
-    await async_setup_entry(hass, mock_config_entry, cast(AddEntitiesCallback, mock_add_entities))
+    await async_setup_entry(
+        hass, mock_config_entry, cast(AddEntitiesCallback, mock_add_entities)
+    )
 
     assert len(entities) == 2
     assert isinstance(entities[0], TPUEnergySensor)
@@ -75,7 +77,9 @@ async def test_async_setup_entry_power_only(hass: HomeAssistant, mock_power_serv
     def mock_add_entities(new_entities: Iterable[Entity]) -> None:
         entities.extend(new_entities)
 
-    await async_setup_entry(hass, power_only_entry, cast(AddEntitiesCallback, mock_add_entities))
+    await async_setup_entry(
+        hass, power_only_entry, cast(AddEntitiesCallback, mock_add_entities)
+    )
 
     assert len(entities) == 1
     assert isinstance(entities[0], TPUEnergySensor)
@@ -118,7 +122,9 @@ async def test_async_setup_entry_water_only(hass: HomeAssistant, mock_water_serv
     def mock_add_entities(new_entities: Iterable[Entity]) -> None:
         entities.extend(new_entities)
 
-    await async_setup_entry(hass, water_only_entry, cast(AddEntitiesCallback, mock_add_entities))
+    await async_setup_entry(
+        hass, water_only_entry, cast(AddEntitiesCallback, mock_add_entities)
+    )
 
     assert len(entities) == 1
     assert isinstance(entities[0], TPUWaterSensor)
