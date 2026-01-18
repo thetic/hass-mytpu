@@ -1,7 +1,7 @@
 [project]
 name = "hass-mytpu"
 version = "0.1.0"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 
 [dependency-groups]
 dev = [
@@ -15,9 +15,6 @@ dev = [
     "ruff",
     "ty",
 ]
-
-[tool.ruff]
-target-version = "py312"
 
 [tool.ruff.lint]
 select = [

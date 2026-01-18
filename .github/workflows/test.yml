@@ -13,12 +13,8 @@ permissions:
 
 jobs:
   pytest:
-    name: Pytest with Python ${{ matrix.python-version }}
+    name: Pytest
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.12", "3.13"]
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,9 +22,8 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Set up Python ${{ matrix.python-version }}
-        run: uv python install ${{ matrix.python-version }}
-
+      - name: Set up Python
+        run: uv python install 3.13
       - name: Install dependencies
         run: uv sync --dev
 
@@ -37,7 +32,6 @@ jobs:
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v5
-        if: matrix.python-version == '3.12'
         with:
           files: ./coverage.xml
           flags: unittests
