@@ -32,8 +32,7 @@ Or manually:
 ### Manual Installation
 
 1. Copy the `custom_components/mytpu` folder to your Home Assistant `config/custom_components/` directory
-2. Copy the `mytpu` library folder to your Home Assistant `config/custom_components/` directory
-3. Restart Home Assistant
+2. Restart Home Assistant
 
 ## Configuration
 
@@ -57,10 +56,10 @@ This integration creates the following sensors:
 
 | Sensor | Description | Unit | Device Class |
 |--------|-------------|------|--------------|
-| Energy Consumption | Total electricity usage | kWh | energy |
-| Water Consumption | Total water usage | CCF | water |
+| Energy Consumption | Daily electricity usage | kWh | energy |
+| Water Consumption | Daily water usage | CCF | water |
 
-Both sensors use `state_class: total_increasing` for proper Energy Dashboard integration.
+Historical data and cumulative totals are tracked using Home Assistant's statistics system for proper Energy Dashboard integration.
 
 ## Energy Dashboard Setup
 
@@ -69,25 +68,6 @@ Both sensors use `state_class: total_increasing` for proper Energy Dashboard int
 3. Select the "Energy Consumption" sensor
 4. Under "Water consumption", click "Add water source"
 5. Select the "Water Consumption" sensor
-
-## Python Library
-
-This repository also includes a standalone Python library for interacting with the MyTPU API:
-
-```python
-from mytpu import MyTPUClient
-from datetime import datetime, timedelta
-
-async with MyTPUClient("username", "password") as client:
-    readings = await client.get_power_usage(
-        meter_number="12345678",
-        service_id="800000000",
-        service_number="ABC123",
-        from_date=datetime.now() - timedelta(days=7),
-    )
-    for r in readings:
-        print(f"{r.date}: {r.consumption} {r.unit}")
-```
 
 ## Acknowledgments
 
