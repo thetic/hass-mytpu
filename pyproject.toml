@@ -1,6 +1,6 @@
 [project]
 name = "hass-mytpu"
-version = "0.1.0"
+version = "0.0.0"
 requires-python = ">=3.13"
 
 [dependency-groups]
@@ -28,21 +28,12 @@ select = [
 ]
 ignore = ["E501"]
 
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
-
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
 addopts = [
     "--cov=custom_components/mytpu",
     "--cov-report=term-missing",
     "--cov-report=xml",
-    "-v",
 ]
 
 [tool.coverage.run]
