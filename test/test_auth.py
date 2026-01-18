@@ -63,6 +63,58 @@ class TestTokenInfo:
         # Should be expired because of >= check with buffer
         assert token.is_expired
 
+    @freeze_time("2026-01-17 12:00:00")
+    def test_token_to_dict(self):
+        """Test TokenInfo serialization to dict."""
+        token = TokenInfo(
+            access_token="test_access",
+            refresh_token="test_refresh",
+            expires_at=time.time() + 3600,
+            customer_id="CUST123",
+        )
+
+        token_dict = token.to_dict()
+
+        assert token_dict["access_token"] == "test_access"
+        assert token_dict["refresh_token"] == "test_refresh"
+        assert token_dict["expires_at"] == time.time() + 3600
+        assert token_dict["customer_id"] == "CUST123"
+
+    @freeze_time("2026-01-17 12:00:00")
+    def test_token_from_dict(self):
+        """Test TokenInfo deserialization from dict."""
+        token_dict = {
+            "access_token": "test_access",
+            "refresh_token": "test_refresh",
+            "expires_at": time.time() + 3600,
+            "customer_id": "CUST123",
+        }
+
+        token = TokenInfo.from_dict(token_dict)
+
+        assert token.access_token == "test_access"
+        assert token.refresh_token == "test_refresh"
+        assert token.expires_at == time.time() + 3600
+        assert token.customer_id == "CUST123"
+
+    @freeze_time("2026-01-17 12:00:00")
+    def test_token_round_trip(self):
+        """Test TokenInfo serialization and deserialization round trip."""
+        original = TokenInfo(
+            access_token="test_access",
+            refresh_token="test_refresh",
+            expires_at=time.time() + 3600,
+            customer_id="CUST123",
+        )
+
+        token_dict = original.to_dict()
+        restored = TokenInfo.from_dict(token_dict)
+
+        assert restored.access_token == original.access_token
+        assert restored.refresh_token == original.refresh_token
+        assert restored.expires_at == original.expires_at
+        assert restored.customer_id == original.customer_id
+
 
 class TestMyTPUAuth:
     """Test MyTPUAuth class."""
@@ -74,6 +126,57 @@ class TestMyTPUAuth:
         assert auth._password == "password123"
         assert auth._token is None
         assert auth._oauth_basic_token is None
+
+    @freeze_time("2026-01-17 12:00:00")
+    def test_init_with_token_data(self):
+        """Test initialization with stored token data."""
+        token_data = {
+            "access_token": "stored_access",
+            "refresh_token": "stored_refresh",
+            "expires_at": time.time() + 3600,
+            "customer_id": "CUST123",
+        }
+
+        auth = MyTPUAuth("user@example.com", "password123", token_data)
+
+        assert auth._username == "user@example.com"
+        assert auth._password == "password123"
+        assert auth._token is not None
+        assert auth._token.access_token == "stored_access"
+        assert auth._token.refresh_token == "stored_refresh"
+        assert auth._token.customer_id == "CUST123"
+
+    def test_init_with_invalid_token_data(self):
+        """Test initialization with invalid token data."""
+        invalid_token_data = {"invalid": "data"}
+
+        auth = MyTPUAuth("user@example.com", "password123", invalid_token_data)
+
+        # Should ignore invalid token data
+        assert auth._token is None
+
+    def test_get_token_data_none(self):
+        """Test get_token_data when no token exists."""
+        auth = MyTPUAuth("user", "pass")
+        assert auth.get_token_data() is None
+
+    @freeze_time("2026-01-17 12:00:00")
+    def test_get_token_data_with_token(self):
+        """Test get_token_data returns token dict."""
+        auth = MyTPUAuth("user", "pass")
+        auth._token = TokenInfo(
+            access_token="test_access",
+            refresh_token="test_refresh",
+            expires_at=time.time() + 3600,
+            customer_id="CUST123",
+        )
+
+        token_data = auth.get_token_data()
+
+        assert token_data is not None
+        assert token_data["access_token"] == "test_access"
+        assert token_data["refresh_token"] == "test_refresh"
+        assert token_data["customer_id"] == "CUST123"
 
     def test_customer_id_none_when_no_token(self):
         """Test customer_id returns None when no token."""
@@ -185,6 +288,97 @@ class TestMyTPUAuth:
                     await auth._get_oauth_basic_token(session)
 
     @pytest.mark.asyncio
+    @freeze_time("2026-01-17 12:00:00")
+    async def test_refresh_token_success(self):
+        """Test successful token refresh."""
+        html = '<script src="main.abc123.js"></script>'
+        js = 'Authorization:"Basic dGVzdDp0ZXN0"'
+
+        refresh_response = {
+            "access_token": "new_access_token",
+            "refresh_token": "new_refresh_token",
+            "expires_in": 3600,
+            "user": {"customerId": "CUST123"},
+        }
+
+        auth = MyTPUAuth("user", "pass")
+        # Set an existing token with refresh_token
+        auth._token = TokenInfo(
+            access_token="old_access",
+            refresh_token="old_refresh",
+            expires_at=time.time() - 100,
+            customer_id="CUST123",
+        )
+
+        async with aiohttp.ClientSession() as session:
+            with aioresponses() as m:
+                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
+                m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
+                m.post(
+                    f"{BASE_URL}/rest/oauth/token",
+                    status=200,
+                    payload=refresh_response,
+                )
+
+                await auth._refresh_token(session)
+
+                assert auth._token.access_token == "new_access_token"
+                assert auth._token.refresh_token == "new_refresh_token"
+                assert auth._token.customer_id == "CUST123"
+
+    @pytest.mark.asyncio
+    async def test_refresh_token_no_token(self):
+        """Test refresh token fails when no token exists."""
+        auth = MyTPUAuth("user", "pass")
+
+        async with aiohttp.ClientSession() as session:
+            with pytest.raises(AuthError, match="No refresh token available"):
+                await auth._refresh_token(session)
+
+    @pytest.mark.asyncio
+    async def test_refresh_token_no_refresh_token(self):
+        """Test refresh token fails when refresh token is empty."""
+        auth = MyTPUAuth("user", "pass")
+        auth._token = TokenInfo(
+            access_token="access",
+            refresh_token="",
+            expires_at=time.time() + 3600,
+            customer_id="CUST123",
+        )
+
+        async with aiohttp.ClientSession() as session:
+            with pytest.raises(AuthError, match="No refresh token available"):
+                await auth._refresh_token(session)
+
+    @pytest.mark.asyncio
+    @freeze_time("2026-01-17 12:00:00")
+    async def test_refresh_token_api_error(self):
+        """Test refresh token handles API errors."""
+        html = '<script src="main.abc123.js"></script>'
+        js = 'Authorization:"Basic dGVzdDp0ZXN0"'
+
+        auth = MyTPUAuth("user", "pass")
+        auth._token = TokenInfo(
+            access_token="old_access",
+            refresh_token="old_refresh",
+            expires_at=time.time() - 100,
+            customer_id="CUST123",
+        )
+
+        async with aiohttp.ClientSession() as session:
+            with aioresponses() as m:
+                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
+                m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
+                m.post(
+                    f"{BASE_URL}/rest/oauth/token",
+                    status=400,
+                    body='{"error": "invalid_grant"}',
+                )
+
+                with pytest.raises(AuthError, match="Token refresh failed: 400"):
+                    await auth._refresh_token(session)
+
+    @pytest.mark.asyncio
     async def test_authenticate_success(self, mock_token_response):
         """Test successful authentication."""
         html = '<script src="main.abc123.js"></script>'
@@ -273,8 +467,49 @@ class TestMyTPUAuth:
 
     @pytest.mark.asyncio
     @freeze_time("2026-01-17 12:00:00")
-    async def test_get_token_when_expired(self, mock_token_response):
-        """Test get_token when token is expired."""
+    async def test_get_token_when_expired_refresh_success(self):
+        """Test get_token refreshes token when expired."""
+        html = '<script src="main.abc123.js"></script>'
+        js = 'Authorization:"Basic dGVzdDp0ZXN0"'
+
+        refresh_response = {
+            "access_token": "refreshed_access_token",
+            "refresh_token": "refreshed_refresh_token",
+            "expires_in": 3600,
+            "user": {"customerId": "CUST123"},
+        }
+
+        auth = MyTPUAuth("user", "pass")
+        # Set an expired token
+        auth._token = TokenInfo(
+            access_token="old_token",
+            refresh_token="old_refresh",
+            expires_at=time.time() - 100,
+            customer_id="OLD123",
+        )
+
+        async with aiohttp.ClientSession() as session:
+            with aioresponses() as m:
+                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
+                m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
+                # Only one call to token endpoint (refresh, not full auth)
+                m.post(
+                    f"{BASE_URL}/rest/oauth/token",
+                    status=200,
+                    payload=refresh_response,
+                )
+
+                token = await auth.get_token(session)
+                assert token == "refreshed_access_token"
+                assert auth._token.refresh_token == "refreshed_refresh_token"
+                assert auth._token.customer_id == "CUST123"
+
+    @pytest.mark.asyncio
+    @freeze_time("2026-01-17 12:00:00")
+    async def test_get_token_when_expired_refresh_fails_then_authenticates(
+        self, mock_token_response
+    ):
+        """Test get_token falls back to authentication when refresh fails."""
         html = '<script src="main.abc123.js"></script>'
         js = 'Authorization:"Basic dGVzdDp0ZXN0"'
 
@@ -291,6 +526,16 @@ class TestMyTPUAuth:
             with aioresponses() as m:
                 m.get(f"{BASE_URL}/eportal/", status=200, body=html)
                 m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
+                # First call (refresh) fails
+                m.post(
+                    f"{BASE_URL}/rest/oauth/token",
+                    status=400,
+                    body='{"error": "invalid_grant"}',
+                )
+                # Need to set up mocks again for re-authentication
+                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
+                m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
+                # Second call (full auth) succeeds
                 m.post(
                     f"{BASE_URL}/rest/oauth/token",
                     status=200,

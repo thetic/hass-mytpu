@@ -23,6 +23,50 @@ class TestMyTPUClient:
         assert client._account_context is None
         assert client._services is None
 
+    def test_init_with_token_data(self):
+        """Test client initialization with stored token data."""
+        import time
+
+        token_data = {
+            "access_token": "stored_access",
+            "refresh_token": "stored_refresh",
+            "expires_at": time.time() + 3600,
+            "customer_id": "CUST123",
+        }
+
+        client = MyTPUClient("user@example.com", "password123", token_data)
+
+        assert client._auth._username == "user@example.com"
+        assert client._auth._password == "password123"
+        assert client._auth._token is not None
+        assert client._auth._token.access_token == "stored_access"
+
+    def test_get_token_data_none(self):
+        """Test get_token_data when no token exists."""
+        client = MyTPUClient("user", "pass")
+        assert client.get_token_data() is None
+
+    def test_get_token_data_with_token(self):
+        """Test get_token_data returns token dict."""
+        import time
+
+        from custom_components.mytpu.auth import TokenInfo
+
+        client = MyTPUClient("user", "pass")
+        client._auth._token = TokenInfo(
+            access_token="test_access",
+            refresh_token="test_refresh",
+            expires_at=time.time() + 3600,
+            customer_id="CUST123",
+        )
+
+        token_data = client.get_token_data()
+
+        assert token_data is not None
+        assert token_data["access_token"] == "test_access"
+        assert token_data["refresh_token"] == "test_refresh"
+        assert token_data["customer_id"] == "CUST123"
+
     @pytest.mark.asyncio
     async def test_context_manager_enter(self):
         """Test async context manager enter."""

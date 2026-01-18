@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 from .auth import AuthError
 from .client import MyTPUClient
-from .const import CONF_POWER_SERVICE, CONF_WATER_SERVICE, DOMAIN
+from .const import CONF_POWER_SERVICE, CONF_TOKEN_DATA, CONF_WATER_SERVICE, DOMAIN
 from .models import Service, ServiceType
 
 _LOGGER = logging.getLogger(__name__)
@@ -34,7 +34,9 @@ async def validate_and_fetch_services(
     hass: HomeAssistant, data: dict[str, Any]
 ) -> tuple[dict[str, Any], list[Service]]:
     """Validate credentials and fetch available services."""
-    client = MyTPUClient(data[CONF_USERNAME], data[CONF_PASSWORD])
+    client = MyTPUClient(
+        data[CONF_USERNAME], data[CONF_PASSWORD], data.get(CONF_TOKEN_DATA)
+    )
 
     try:
         async with client:
