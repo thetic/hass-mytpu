@@ -23,6 +23,25 @@ class TokenInfo:
         """Check if the token is expired (with 60s buffer)."""
         return time.time() >= (self.expires_at - 60)
 
+    def to_dict(self) -> dict:
+        """Serialize token info to dictionary for storage."""
+        return {
+            "access_token": self.access_token,
+            "refresh_token": self.refresh_token,
+            "expires_at": self.expires_at,
+            "customer_id": self.customer_id,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "TokenInfo":
+        """Deserialize token info from dictionary."""
+        return cls(
+            access_token=data["access_token"],
+            refresh_token=data["refresh_token"],
+            expires_at=data["expires_at"],
+            customer_id=data["customer_id"],
+        )
+
 
 class AuthError(Exception):
     """Authentication error."""
@@ -33,21 +52,46 @@ class AuthError(Exception):
 class MyTPUAuth:
     """Handles OAuth2 authentication with MyTPU."""
 
-    def __init__(self, username: str, password: str):
+    def __init__(self, username: str, password: str, token_data: dict | None = None):
+        """Initialize auth handler.
+
+        Args:
+            username: MyTPU account username
+            password: MyTPU account password
+            token_data: Previously stored token data (optional)
+        """
         self._username = username
         self._password = password
         self._token: TokenInfo | None = None
         self._oauth_basic_token: str | None = None
+
+        # Load stored token if available
+        if token_data:
+            try:
+                self._token = TokenInfo.from_dict(token_data)
+            except (KeyError, ValueError):
+                # Invalid token data, will re-authenticate
+                self._token = None
 
     @property
     def customer_id(self) -> str | None:
         """Get the customer ID from the token."""
         return self._token.customer_id if self._token else None
 
+    def get_token_data(self) -> dict | None:
+        """Get current token data for storage."""
+        return self._token.to_dict() if self._token else None
+
     async def get_token(self, session: aiohttp.ClientSession) -> str:
         """Get a valid access token, refreshing if necessary."""
-        if self._token is None or self._token.is_expired:
+        if self._token is None:
             await self._authenticate(session)
+        elif self._token.is_expired:
+            # Try to refresh the token first, fall back to re-authentication if it fails
+            try:
+                await self._refresh_token(session)
+            except AuthError:
+                await self._authenticate(session)
         assert self._token is not None
         return self._token.access_token
 
@@ -98,6 +142,46 @@ class MyTPUAuth:
 
         self._oauth_basic_token = match.group(1)
         return self._oauth_basic_token
+
+    async def _refresh_token(self, session: aiohttp.ClientSession) -> None:
+        """Refresh the access token using the refresh token."""
+        if not self._token or not self._token.refresh_token:
+            raise AuthError("No refresh token available")
+
+        # Get the Basic auth token from the JS bundle
+        basic_token = await self._get_oauth_basic_token(session)
+
+        url = f"{BASE_URL}/rest/oauth/token"
+        data = {
+            "grant_type": "refresh_token",
+            "refresh_token": self._token.refresh_token,
+        }
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": f"Basic {basic_token}",
+        }
+
+        async with session.post(url, data=data, headers=headers) as resp:
+            if resp.status != 200:
+                text = await resp.text()
+                raise AuthError(f"Token refresh failed: {resp.status} - {text}")
+
+            result = await resp.json()
+
+            if "access_token" not in result:
+                raise AuthError(f"No access token in refresh response: {result}")
+
+            expires_in = result.get("expires_in", 3600)
+            # Keep the same customer_id and refresh_token if not provided
+            customer_id = result.get("user", {}).get("customerId", self._token.customer_id)
+            refresh_token = result.get("refresh_token", self._token.refresh_token)
+
+            self._token = TokenInfo(
+                access_token=result["access_token"],
+                refresh_token=refresh_token,
+                expires_at=time.time() + expires_in,
+                customer_id=customer_id,
+            )
 
     async def _authenticate(self, session: aiohttp.ClientSession) -> None:
         """Authenticate with username/password to get tokens."""

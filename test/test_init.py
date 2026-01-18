@@ -18,7 +18,7 @@ from custom_components.mytpu import (
 )
 from custom_components.mytpu.const import (
     CONF_POWER_SERVICE,
-    CONF_WATER_SERVICE,
+    CONF_TOKEN_DATA,
     DOMAIN,
 )
 from custom_components.mytpu.models import Service, ServiceType, UsageReading
@@ -116,69 +116,58 @@ async def test_async_unload_entry(hass: HomeAssistant, mock_config_entry):
 class TestTPUDataUpdateCoordinator:
     """Test TPUDataUpdateCoordinator class."""
 
-    def test_init_with_both_services(self, hass: HomeAssistant):
+    def test_init_with_both_services(self, hass: HomeAssistant, mock_config_entry):
         """Test coordinator initialization with both services."""
         mock_client = MagicMock()
-        config = {
-            CONF_USERNAME: "user",
-            CONF_PASSWORD: "pass",
-            CONF_POWER_SERVICE: json.dumps(
-                {
-                    "service_id": "123",
-                    "service_number": "SVC001",
-                    "meter_number": "MOCK_POWER_METER",
-                    "display_meter_number": "MOCK_POWER_METER",
-                    "service_type": "P",
-                }
-            ),
-            CONF_WATER_SERVICE: json.dumps(
-                {
-                    "service_id": "456",
-                    "service_number": "SVC002",
-                    "meter_number": "MOCK_WATER_METER",
-                    "display_meter_number": "MOCK_WATER_METER",
-                    "service_type": "W",
-                }
-            ),
-        }
 
-        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config)
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, mock_config_entry)
 
         assert coordinator.client is mock_client
+        assert coordinator.config_entry is mock_config_entry
         assert coordinator.power_service is not None
         assert coordinator.power_service.meter_number == "MOCK_POWER_METER"
         assert coordinator.water_service is not None
         assert coordinator.water_service.meter_number == "MOCK_WATER_METER"
 
-    def test_init_power_only(self, hass: HomeAssistant):
+    def test_init_power_only(self, hass: HomeAssistant, mock_power_service):
         """Test coordinator initialization with power service only."""
-        mock_client = MagicMock()
-        config = {
-            CONF_USERNAME: "user",
-            CONF_PASSWORD: "pass",
-            CONF_POWER_SERVICE: json.dumps(
-                {
-                    "service_id": "123",
-                    "service_number": "SVC001",
-                    "meter_number": "MOCK_POWER_METER",
-                    "display_meter_number": "MOCK_POWER_METER",
-                    "service_type": "P",
-                }
-            ),
-        }
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config)
+        mock_client = MagicMock()
+        # Create a config entry with only power service
+        config_entry = MockConfigEntry(
+            domain=DOMAIN,
+            version=1,
+            data={
+                CONF_USERNAME: "user",
+                CONF_PASSWORD: "pass",
+                CONF_POWER_SERVICE: json.dumps(
+                    {
+                        "service_id": mock_power_service.service_id,
+                        "service_number": mock_power_service.service_number,
+                        "meter_number": mock_power_service.meter_number,
+                        "display_meter_number": mock_power_service.display_meter_number,
+                        "service_type": mock_power_service.service_type.value,
+                    }
+                ),
+            },
+            unique_id="test_power_only",
+            title="Test",
+        )
+
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
         assert coordinator.power_service is not None
         assert coordinator.water_service is None
 
     @pytest.mark.asyncio
     async def test_async_update_data_success(
-        self, hass: HomeAssistant, mock_power_service, mock_water_service
+        self, hass: HomeAssistant, mock_power_service, mock_water_service, mock_config_entry
     ):
         """Test successful data update."""
         mock_client = AsyncMock()
         mock_client.get_account_info = AsyncMock()
+        mock_client.get_token_data = MagicMock(return_value=None)
 
         power_readings = [
             UsageReading(
@@ -203,28 +192,7 @@ class TestTPUDataUpdateCoordinator:
         mock_client.get_power_usage = AsyncMock(return_value=power_readings)
         mock_client.get_water_usage = AsyncMock(return_value=water_readings)
 
-        config = {
-            CONF_POWER_SERVICE: json.dumps(
-                {
-                    "service_id": mock_power_service.service_id,
-                    "service_number": mock_power_service.service_number,
-                    "meter_number": mock_power_service.meter_number,
-                    "display_meter_number": mock_power_service.display_meter_number,
-                    "service_type": mock_power_service.service_type.value,
-                }
-            ),
-            CONF_WATER_SERVICE: json.dumps(
-                {
-                    "service_id": mock_water_service.service_id,
-                    "service_number": mock_water_service.service_number,
-                    "meter_number": mock_water_service.meter_number,
-                    "display_meter_number": mock_water_service.display_meter_number,
-                    "service_type": mock_water_service.service_type.value,
-                }
-            ),
-        }
-
-        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config)
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, mock_config_entry)
 
         with patch.object(
             coordinator, "_import_statistics", new=AsyncMock()
@@ -248,23 +216,34 @@ class TestTPUDataUpdateCoordinator:
         self, hass: HomeAssistant, mock_power_service
     ):
         """Test data update with no readings."""
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
         mock_client = AsyncMock()
         mock_client.get_account_info = AsyncMock()
         mock_client.get_power_usage = AsyncMock(return_value=[])
+        mock_client.get_token_data = MagicMock(return_value=None)
 
-        config = {
-            CONF_POWER_SERVICE: json.dumps(
-                {
-                    "service_id": mock_power_service.service_id,
-                    "service_number": mock_power_service.service_number,
-                    "meter_number": mock_power_service.meter_number,
-                    "display_meter_number": mock_power_service.display_meter_number,
-                    "service_type": mock_power_service.service_type.value,
-                }
-            ),
-        }
+        config_entry = MockConfigEntry(
+            domain=DOMAIN,
+            version=1,
+            data={
+                CONF_USERNAME: "user",
+                CONF_PASSWORD: "pass",
+                CONF_POWER_SERVICE: json.dumps(
+                    {
+                        "service_id": mock_power_service.service_id,
+                        "service_number": mock_power_service.service_number,
+                        "meter_number": mock_power_service.meter_number,
+                        "display_meter_number": mock_power_service.display_meter_number,
+                        "service_type": mock_power_service.service_type.value,
+                    }
+                ),
+            },
+            unique_id="test_no_readings",
+            title="Test",
+        )
 
-        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config)
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
         data = await coordinator._async_update_data()
 
@@ -275,34 +254,121 @@ class TestTPUDataUpdateCoordinator:
         self, hass: HomeAssistant, mock_power_service
     ):
         """Test data update with error."""
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
         mock_client = AsyncMock()
         mock_client.get_account_info = AsyncMock(side_effect=Exception("API Error"))
 
-        config = {
-            CONF_POWER_SERVICE: json.dumps(
-                {
-                    "service_id": mock_power_service.service_id,
-                    "service_number": mock_power_service.service_number,
-                    "meter_number": mock_power_service.meter_number,
-                    "display_meter_number": mock_power_service.display_meter_number,
-                    "service_type": mock_power_service.service_type.value,
-                }
-            ),
-        }
+        config_entry = MockConfigEntry(
+            domain=DOMAIN,
+            version=1,
+            data={
+                CONF_USERNAME: "user",
+                CONF_PASSWORD: "pass",
+                CONF_POWER_SERVICE: json.dumps(
+                    {
+                        "service_id": mock_power_service.service_id,
+                        "service_number": mock_power_service.service_number,
+                        "meter_number": mock_power_service.meter_number,
+                        "display_meter_number": mock_power_service.display_meter_number,
+                        "service_type": mock_power_service.service_type.value,
+                    }
+                ),
+            },
+            unique_id="test_error",
+            title="Test",
+        )
 
-        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config)
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
         with pytest.raises(UpdateFailed, match="Error communicating with TPU"):
             await coordinator._async_update_data()
+
+    @pytest.mark.asyncio
+    async def test_save_token_data(self, hass: HomeAssistant, mock_config_entry):
+        """Test that token data is saved to config entry."""
+        import time
+
+        mock_client = AsyncMock()
+        token_data = {
+            "access_token": "new_access",
+            "refresh_token": "new_refresh",
+            "expires_at": time.time() + 3600,
+            "customer_id": "CUST123",
+        }
+        mock_client.get_token_data = MagicMock(return_value=token_data)
+
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, mock_config_entry)
+
+        # Mock async_update_entry
+        with patch.object(
+            hass.config_entries, "async_update_entry", new=MagicMock()
+        ) as mock_update:
+            await coordinator._save_token_data()
+
+            # Should update config entry with new token data
+            mock_update.assert_called_once()
+            call_args = mock_update.call_args
+            assert call_args.args[0] == mock_config_entry
+            assert CONF_TOKEN_DATA in call_args.kwargs["data"]
+            assert call_args.kwargs["data"][CONF_TOKEN_DATA] == token_data
+
+    @pytest.mark.asyncio
+    async def test_save_token_data_no_change(self, hass: HomeAssistant):
+        """Test that token data is not saved if unchanged."""
+        import time
+
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+        token_data = {
+            "access_token": "existing_access",
+            "refresh_token": "existing_refresh",
+            "expires_at": time.time() + 3600,
+            "customer_id": "CUST123",
+        }
+
+        config_entry = MockConfigEntry(
+            domain=DOMAIN,
+            version=1,
+            data={
+                CONF_USERNAME: "user",
+                CONF_PASSWORD: "pass",
+                CONF_TOKEN_DATA: token_data,
+            },
+            unique_id="test_no_change",
+            title="Test",
+        )
+
+        mock_client = AsyncMock()
+        # Return same token data
+        mock_client.get_token_data = MagicMock(return_value=token_data)
+
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
+
+        with patch.object(
+            hass.config_entries, "async_update_entry", new=MagicMock()
+        ) as mock_update:
+            await coordinator._save_token_data()
+
+            # Should not update if data is unchanged
+            mock_update.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_import_statistics_new_data(
         self, hass: HomeAssistant, mock_power_service
     ):
         """Test importing new statistics."""
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
         mock_client = AsyncMock()
-        config = {}
-        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config)
+        config_entry = MockConfigEntry(
+            domain=DOMAIN,
+            version=1,
+            data={CONF_USERNAME: "user", CONF_PASSWORD: "pass"},
+            unique_id="test_import",
+            title="Test",
+        )
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
         readings = [
             UsageReading(
@@ -349,9 +415,11 @@ class TestTPUDataUpdateCoordinator:
         self, hass: HomeAssistant, mock_power_service
     ):
         """Test importing statistics with existing data."""
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
         mock_client = AsyncMock()
-        config = {}
-        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config)
+        config_entry = MockConfigEntry(domain=DOMAIN, version=1, data={CONF_USERNAME: "user", CONF_PASSWORD: "pass"}, unique_id="test_import2", title="Test")
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
         readings = [
             UsageReading(
@@ -398,9 +466,11 @@ class TestTPUDataUpdateCoordinator:
         self, hass: HomeAssistant, mock_power_service
     ):
         """Test that duplicate dates are skipped."""
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
         mock_client = AsyncMock()
-        config = {}
-        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config)
+        config_entry = MockConfigEntry(domain=DOMAIN, version=1, data={CONF_USERNAME: "user", CONF_PASSWORD: "pass"}, unique_id="test_import3", title="Test")
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
         readings = [
             UsageReading(
@@ -445,9 +515,11 @@ class TestTPUDataUpdateCoordinator:
         self, hass: HomeAssistant, mock_water_service
     ):
         """Test importing water statistics."""
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
         mock_client = AsyncMock()
-        config = {}
-        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config)
+        config_entry = MockConfigEntry(domain=DOMAIN, version=1, data={CONF_USERNAME: "user", CONF_PASSWORD: "pass"}, unique_id="test_import4", title="Test")
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
         readings = [
             UsageReading(
@@ -480,9 +552,11 @@ class TestTPUDataUpdateCoordinator:
     @pytest.mark.asyncio
     async def test_import_statistics_meter_id_sanitization(self, hass: HomeAssistant):
         """Test that meter IDs with hyphens are sanitized."""
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
         mock_client = AsyncMock()
-        config = {}
-        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config)
+        config_entry = MockConfigEntry(domain=DOMAIN, version=1, data={CONF_USERNAME: "user", CONF_PASSWORD: "pass"}, unique_id="test_import5", title="Test")
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
         service = Service(
             service_id="123",

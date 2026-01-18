@@ -8,8 +8,6 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
-
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
@@ -33,7 +31,13 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .client import MyTPUClient
-from .const import CONF_POWER_SERVICE, CONF_WATER_SERVICE, DOMAIN, UPDATE_INTERVAL_HOURS
+from .const import (
+    CONF_POWER_SERVICE,
+    CONF_TOKEN_DATA,
+    CONF_WATER_SERVICE,
+    DOMAIN,
+    UPDATE_INTERVAL_HOURS,
+)
 from .models import Service, ServiceType
 
 _LOGGER = logging.getLogger(__name__)
@@ -64,9 +68,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     client = MyTPUClient(
         entry.data[CONF_USERNAME],
         entry.data[CONF_PASSWORD],
+        entry.data.get(CONF_TOKEN_DATA),
     )
 
-    coordinator = TPUDataUpdateCoordinator(hass, client, entry.data)
+    coordinator = TPUDataUpdateCoordinator(hass, client, entry)
     await coordinator.async_config_entry_first_refresh()
 
     hass.data[DOMAIN][entry.entry_id] = coordinator
@@ -88,11 +93,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Class to manage fetching TPU data."""
 
+    config_entry: ConfigEntry
+
     def __init__(
         self,
         hass: HomeAssistant,
         client: MyTPUClient,
-        config: Mapping[str, Any],
+        config_entry: ConfigEntry,
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
@@ -102,21 +109,28 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(hours=UPDATE_INTERVAL_HOURS),
         )
         self.client = client
-        self.config: Mapping[str, Any] = config
+        self.config_entry = config_entry
 
         # Parse service configs from JSON
         self.power_service: Service | None = None
         self.water_service: Service | None = None
-        if config.get(CONF_POWER_SERVICE):
-            self.power_service = _service_from_config(config[CONF_POWER_SERVICE])
-        if config.get(CONF_WATER_SERVICE):
-            self.water_service = _service_from_config(config[CONF_WATER_SERVICE])
+        if config_entry.data.get(CONF_POWER_SERVICE):
+            self.power_service = _service_from_config(
+                config_entry.data[CONF_POWER_SERVICE]
+            )
+        if config_entry.data.get(CONF_WATER_SERVICE):
+            self.water_service = _service_from_config(
+                config_entry.data[CONF_WATER_SERVICE]
+            )
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from TPU and update statistics."""
         try:
             # Ensure we have account context
             await self.client.get_account_info()
+
+            # Save updated token data to config entry if changed
+            await self._save_token_data()
 
             data: dict[str, Any] = {}
 
@@ -154,6 +168,15 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         except Exception as err:
             raise UpdateFailed(f"Error communicating with TPU: {err}") from err
+
+    async def _save_token_data(self) -> None:
+        """Save updated token data to config entry if changed."""
+        token_data = self.client.get_token_data()
+        if token_data and token_data != self.config_entry.data.get(CONF_TOKEN_DATA):
+            new_data = {**self.config_entry.data, CONF_TOKEN_DATA: token_data}
+            self.hass.config_entries.async_update_entry(
+                self.config_entry, data=new_data
+            )
 
     async def _import_statistics(
         self, service: Service, readings: list, stat_type: str

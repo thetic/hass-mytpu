@@ -20,14 +20,15 @@ class MyTPUError(Exception):
 class MyTPUClient:
     """Client for interacting with the MyTPU API."""
 
-    def __init__(self, username: str, password: str):
+    def __init__(self, username: str, password: str, token_data: dict | None = None):
         """Initialize the client with credentials.
 
         Args:
             username: MyTPU account username
             password: MyTPU account password
+            token_data: Previously stored token data (optional)
         """
-        self._auth = MyTPUAuth(username, password)
+        self._auth = MyTPUAuth(username, password, token_data)
         self._session: aiohttp.ClientSession | None = None
         self._account_context: dict | None = None
         self._services: list[Service] | None = None
@@ -180,6 +181,10 @@ class MyTPUClient:
     ) -> list[UsageReading]:
         """Convenience method to fetch water usage."""
         return await self.get_usage(service, from_date, to_date)
+
+    def get_token_data(self) -> dict | None:
+        """Get current token data for storage."""
+        return self._auth.get_token_data()
 
     async def close(self) -> None:
         """Close the client session."""
