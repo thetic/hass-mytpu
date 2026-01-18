@@ -1,0 +1,33 @@
+{
+  "accountContext": {
+    "accountHolder": "Test User",
+    "accountNumber": "ACC123",
+    "serviceAddress": "123 Test St, Tacoma, WA 98402"
+  },
+  "accountSummaryType": {
+    "servicesForGraph": [
+      {
+        "serviceId": "12345",
+        "serviceNumber": "SVC001",
+        "meterNumber": "MOCK_POWER_METER",
+        "exportMeterNum": "MOCK_POWER_METER",
+        "serviceType": "P",
+        "latitude": "47.2529",
+        "longitude": "-122.4443",
+        "serviceContract": "CNT001",
+        "totalizerMeter": "N"
+      },
+      {
+        "serviceId": "67890",
+        "serviceNumber": "SVC002",
+        "meterNumber": "MOCK_WATER_METER",
+        "exportMeterNum": "MOCK_WATER_METER",
+        "serviceType": "W",
+        "latitude": "47.2529",
+        "longitude": "-122.4443",
+        "serviceContract": "CNT002",
+        "totalizerMeter": "N"
+      }
+    ]
+  }
+}

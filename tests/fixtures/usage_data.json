@@ -1,0 +1,44 @@
+{
+  "history": [
+    {
+      "usageDate": "2026-01-01",
+      "usageConsumptionValue": 25.5,
+      "uom": "kWh",
+      "usageHighTemp": 45.0,
+      "usageLowTemp": 32.0,
+      "demandPeakTime": "2026-01-01 14:30"
+    },
+    {
+      "usageDate": "2026-01-02",
+      "usageConsumptionValue": 28.3,
+      "uom": "kWh",
+      "usageHighTemp": 48.0,
+      "usageLowTemp": 35.0,
+      "demandPeakTime": "2026-01-02 16:15"
+    },
+    {
+      "usageDate": "2026-01-03",
+      "usageConsumptionValue": 22.7,
+      "uom": "kWh",
+      "usageHighTemp": 42.0,
+      "usageLowTemp": 30.0,
+      "demandPeakTime": "2026-01-03 15:45"
+    },
+    {
+      "usageDate": "2026-01-04",
+      "usageConsumptionValue": 30.1,
+      "uom": "kWh",
+      "usageHighTemp": 50.0,
+      "usageLowTemp": 38.0,
+      "demandPeakTime": "2026-01-04 17:00"
+    },
+    {
+      "usageDate": "2026-01-05",
+      "usageConsumptionValue": 26.8,
+      "uom": "kWh",
+      "usageHighTemp": 46.0,
+      "usageLowTemp": 34.0,
+      "demandPeakTime": "2026-01-05 14:20"
+    }
+  ]
+}
