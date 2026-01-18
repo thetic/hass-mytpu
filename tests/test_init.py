@@ -1,11 +1,10 @@
 """Tests for mytpu integration setup and coordinator."""
 
 import json
-from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
@@ -78,20 +77,22 @@ async def test_async_setup_entry(hass: HomeAssistant, mock_config_entry):
         mock_client = AsyncMock()
         mock_client_class.return_value = mock_client
 
-        with patch.object(
-            TPUDataUpdateCoordinator, "async_config_entry_first_refresh"
-        ) as mock_refresh:
+        with (
+            patch.object(
+                TPUDataUpdateCoordinator, "async_config_entry_first_refresh"
+            ) as mock_refresh,
             # Mock the platform forwarding since we're testing the setup logic
-            with patch.object(
+            patch.object(
                 hass.config_entries, "async_forward_entry_setups", return_value=None
-            ) as mock_forward:
-                result = await async_setup_entry(hass, mock_config_entry)
+            ) as mock_forward,
+        ):
+            result = await async_setup_entry(hass, mock_config_entry)
 
-                assert result is True
-                assert DOMAIN in hass.data
-                assert mock_config_entry.entry_id in hass.data[DOMAIN]
-                mock_refresh.assert_called_once()
-                mock_forward.assert_called_once()
+            assert result is True
+            assert DOMAIN in hass.data
+            assert mock_config_entry.entry_id in hass.data[DOMAIN]
+            mock_refresh.assert_called_once()
+            mock_forward.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -270,7 +271,9 @@ class TestTPUDataUpdateCoordinator:
         assert data == {}
 
     @pytest.mark.asyncio
-    async def test_async_update_data_error(self, hass: HomeAssistant, mock_power_service):
+    async def test_async_update_data_error(
+        self, hass: HomeAssistant, mock_power_service
+    ):
         """Test data update with error."""
         mock_client = AsyncMock()
         mock_client.get_account_info = AsyncMock(side_effect=Exception("API Error"))
@@ -314,34 +317,32 @@ class TestTPUDataUpdateCoordinator:
             ),
         ]
 
-        with patch(
-            "custom_components.mytpu.get_last_statistics", return_value={}
-        ) as mock_get_stats:
-            with patch(
+        with (
+            patch("custom_components.mytpu.get_last_statistics", return_value={}),
+            patch(
                 "custom_components.mytpu.async_add_external_statistics"
-            ) as mock_add_stats:
-                await coordinator._import_statistics(
-                    mock_power_service, readings, "energy"
-                )
+            ) as mock_add_stats,
+        ):
+            await coordinator._import_statistics(mock_power_service, readings, "energy")
 
-                mock_add_stats.assert_called_once()
-                # Extract arguments: async_add_external_statistics(hass, metadata, statistics)
-                # call_args.args gives us the tuple of positional arguments
-                args = mock_add_stats.call_args.args
-                metadata = args[1]  # Second positional arg (metadata)
-                statistics = args[2]  # Third positional arg (statistics)
+            mock_add_stats.assert_called_once()
+            # Extract arguments: async_add_external_statistics(hass, metadata, statistics)
+            # call_args.args gives us the tuple of positional arguments
+            args = mock_add_stats.call_args.args
+            metadata = args[1]  # Second positional arg (metadata)
+            statistics = args[2]  # Third positional arg (statistics)
 
-                # Verify metadata (metadata is a dict)
-                assert metadata["statistic_id"] == f"{DOMAIN}:p_mock_power_meter_energy"
-                assert metadata["has_sum"] is True
-                assert "TPU Energy" in metadata["name"]
+            # Verify metadata (metadata is a dict)
+            assert metadata["statistic_id"] == f"{DOMAIN}:p_mock_power_meter_energy"
+            assert metadata["has_sum"] is True
+            assert "TPU Energy" in metadata["name"]
 
-                # Verify statistics (statistics items are dicts)
-                assert len(statistics) == 2
-                assert statistics[0]["state"] == 25.5
-                assert statistics[0]["sum"] == 25.5  # Cumulative
-                assert statistics[1]["state"] == 28.3
-                assert statistics[1]["sum"] == 53.8  # 25.5 + 28.3
+            # Verify statistics (statistics items are dicts)
+            assert len(statistics) == 2
+            assert statistics[0]["state"] == 25.5
+            assert statistics[0]["sum"] == 25.5  # Cumulative
+            assert statistics[1]["state"] == 28.3
+            assert statistics[1]["sum"] == 53.8  # 25.5 + 28.3
 
     @pytest.mark.asyncio
     async def test_import_statistics_with_previous_data(
@@ -371,25 +372,26 @@ class TestTPUDataUpdateCoordinator:
             ]
         }
 
-        with patch(
-            "custom_components.mytpu.get_last_statistics", return_value=mock_last_stats
-        ):
-            with patch(
+        with (
+            patch(
+                "custom_components.mytpu.get_last_statistics",
+                return_value=mock_last_stats,
+            ),
+            patch(
                 "custom_components.mytpu.async_add_external_statistics"
-            ) as mock_add_stats:
-                await coordinator._import_statistics(
-                    mock_power_service, readings, "energy"
-                )
+            ) as mock_add_stats,
+        ):
+            await coordinator._import_statistics(mock_power_service, readings, "energy")
 
-                mock_add_stats.assert_called_once()
-                # Extract arguments: async_add_external_statistics(hass, metadata, statistics)
-                args = mock_add_stats.call_args.args
-                statistics = args[2]  # Third positional arg (statistics)
+            mock_add_stats.assert_called_once()
+            # Extract arguments: async_add_external_statistics(hass, metadata, statistics)
+            args = mock_add_stats.call_args.args
+            statistics = args[2]  # Third positional arg (statistics)
 
-                # Should only have 1 new statistic
-                assert len(statistics) == 1
-                # Sum should continue from previous (statistics items are dicts)
-                assert statistics[0]["sum"] == 130.0  # 100.0 + 30.0
+            # Should only have 1 new statistic
+            assert len(statistics) == 1
+            # Sum should continue from previous (statistics items are dicts)
+            assert statistics[0]["sum"] == 130.0  # 100.0 + 30.0
 
     @pytest.mark.asyncio
     async def test_import_statistics_skip_duplicates(
@@ -424,18 +426,19 @@ class TestTPUDataUpdateCoordinator:
             ]
         }
 
-        with patch(
-            "custom_components.mytpu.get_last_statistics", return_value=mock_last_stats
-        ):
-            with patch(
+        with (
+            patch(
+                "custom_components.mytpu.get_last_statistics",
+                return_value=mock_last_stats,
+            ),
+            patch(
                 "custom_components.mytpu.async_add_external_statistics"
-            ) as mock_add_stats:
-                await coordinator._import_statistics(
-                    mock_power_service, readings, "energy"
-                )
+            ) as mock_add_stats,
+        ):
+            await coordinator._import_statistics(mock_power_service, readings, "energy")
 
-                # Should not add any statistics (all duplicates)
-                mock_add_stats.assert_not_called()
+            # Should not add any statistics (all duplicates)
+            mock_add_stats.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_import_statistics_water(
@@ -454,32 +457,28 @@ class TestTPUDataUpdateCoordinator:
             ),
         ]
 
-        with patch(
-            "custom_components.mytpu.get_last_statistics", return_value={}
-        ):
-            with patch(
+        with (
+            patch("custom_components.mytpu.get_last_statistics", return_value={}),
+            patch(
                 "custom_components.mytpu.async_add_external_statistics"
-            ) as mock_add_stats:
-                await coordinator._import_statistics(
-                    mock_water_service, readings, "water"
-                )
+            ) as mock_add_stats,
+        ):
+            await coordinator._import_statistics(mock_water_service, readings, "water")
 
-                mock_add_stats.assert_called_once()
-                # Extract arguments: async_add_external_statistics(hass, metadata, statistics)
-                # call_args.args gives us the tuple of positional arguments
-                args = mock_add_stats.call_args.args
-                metadata = args[1]  # Second positional arg (metadata)
-                statistics = args[2]  # Third positional arg (statistics)
+            mock_add_stats.assert_called_once()
+            # Extract arguments: async_add_external_statistics(hass, metadata, statistics)
+            # call_args.args gives us the tuple of positional arguments
+            args = mock_add_stats.call_args.args
+            metadata = args[1]  # Second positional arg (metadata)
+            args[2]  # Third positional arg (statistics)
 
-                # Verify metadata for water (metadata is a dict)
-                assert metadata["statistic_id"] == f"{DOMAIN}:w_mock_water_meter_water"
-                assert "TPU Water" in metadata["name"]
-                assert metadata["unit_class"] == "volume"
+            # Verify metadata for water (metadata is a dict)
+            assert metadata["statistic_id"] == f"{DOMAIN}:w_mock_water_meter_water"
+            assert "TPU Water" in metadata["name"]
+            assert metadata["unit_class"] == "volume"
 
     @pytest.mark.asyncio
-    async def test_import_statistics_meter_id_sanitization(
-        self, hass: HomeAssistant
-    ):
+    async def test_import_statistics_meter_id_sanitization(self, hass: HomeAssistant):
         """Test that meter IDs with hyphens are sanitized."""
         mock_client = AsyncMock()
         config = {}
@@ -501,18 +500,18 @@ class TestTPUDataUpdateCoordinator:
             ),
         ]
 
-        with patch(
-            "custom_components.mytpu.get_last_statistics", return_value={}
-        ):
-            with patch(
+        with (
+            patch("custom_components.mytpu.get_last_statistics", return_value={}),
+            patch(
                 "custom_components.mytpu.async_add_external_statistics"
-            ) as mock_add_stats:
-                await coordinator._import_statistics(service, readings, "energy")
+            ) as mock_add_stats,
+        ):
+            await coordinator._import_statistics(service, readings, "energy")
 
-                # Extract arguments: async_add_external_statistics(hass, metadata, statistics)
-                # call_args.args gives us the tuple of positional arguments
-                args = mock_add_stats.call_args.args
-                metadata = args[1]  # Second positional arg (metadata)
+            # Extract arguments: async_add_external_statistics(hass, metadata, statistics)
+            # call_args.args gives us the tuple of positional arguments
+            args = mock_add_stats.call_args.args
+            metadata = args[1]  # Second positional arg (metadata)
 
-                # Hyphens should be replaced with underscores and lowercased (metadata is a dict)
-                assert metadata["statistic_id"] == f"{DOMAIN}:p_mtr_123_abc_energy"
+            # Hyphens should be replaced with underscores and lowercased (metadata is a dict)
+            assert metadata["statistic_id"] == f"{DOMAIN}:p_mtr_123_abc_energy"

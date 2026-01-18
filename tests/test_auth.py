@@ -1,7 +1,6 @@
 """Tests for mytpu authentication."""
 
 import time
-from unittest.mock import AsyncMock, patch
 
 import aiohttp
 import pytest
@@ -91,9 +90,7 @@ class TestMyTPUAuth:
         async with aiohttp.ClientSession() as session:
             with aioresponses() as m:
                 m.get(f"{BASE_URL}/eportal/", status=200, body=html)
-                m.get(
-                    f"{BASE_URL}/eportal/main.abc123def456.js", status=200, body=js
-                )
+                m.get(f"{BASE_URL}/eportal/main.abc123def456.js", status=200, body=js)
 
                 token = await auth._get_oauth_basic_token(session)
                 assert token == "dGVzdDp0ZXN0"
@@ -174,7 +171,7 @@ class TestMyTPUAuth:
     async def test_get_oauth_basic_token_no_token_in_js(self):
         """Test error when Basic token not found in JS."""
         html = '<script src="main.abc123.js"></script>'
-        js = 'var config = { headers: {} };'
+        js = "var config = { headers: {} };"
 
         auth = MyTPUAuth("user", "pass")
         async with aiohttp.ClientSession() as session:
@@ -198,7 +195,11 @@ class TestMyTPUAuth:
             with aioresponses() as m:
                 m.get(f"{BASE_URL}/eportal/", status=200, body=html)
                 m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
-                m.post(f"{BASE_URL}/rest/oauth/token", status=200, payload=mock_token_response)
+                m.post(
+                    f"{BASE_URL}/rest/oauth/token",
+                    status=200,
+                    payload=mock_token_response,
+                )
 
                 await auth._authenticate(session)
 
@@ -213,14 +214,17 @@ class TestMyTPUAuth:
         """Test authentication with invalid credentials."""
         html = '<script src="main.abc123.js"></script>'
         js = 'Authorization:"Basic dGVzdDp0ZXN0"'
-        error_response = {"error": "invalid_grant"}
 
         auth = MyTPUAuth("user", "wrongpass")
         async with aiohttp.ClientSession() as session:
             with aioresponses() as m:
                 m.get(f"{BASE_URL}/eportal/", status=200, body=html)
                 m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
-                m.post(f"{BASE_URL}/rest/oauth/token", status=401, body='{"error": "invalid_grant"}')
+                m.post(
+                    f"{BASE_URL}/rest/oauth/token",
+                    status=401,
+                    body='{"error": "invalid_grant"}',
+                )
 
                 with pytest.raises(AuthError, match="Authentication failed: 401"):
                     await auth._authenticate(session)
@@ -237,7 +241,11 @@ class TestMyTPUAuth:
             with aioresponses() as m:
                 m.get(f"{BASE_URL}/eportal/", status=200, body=html)
                 m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
-                m.post(f"{BASE_URL}/rest/oauth/token", status=200, payload=incomplete_response)
+                m.post(
+                    f"{BASE_URL}/rest/oauth/token",
+                    status=200,
+                    payload=incomplete_response,
+                )
 
                 with pytest.raises(AuthError, match="No access token in response"):
                     await auth._authenticate(session)
@@ -254,7 +262,11 @@ class TestMyTPUAuth:
             with aioresponses() as m:
                 m.get(f"{BASE_URL}/eportal/", status=200, body=html)
                 m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
-                m.post(f"{BASE_URL}/rest/oauth/token", status=200, payload=mock_token_response)
+                m.post(
+                    f"{BASE_URL}/rest/oauth/token",
+                    status=200,
+                    payload=mock_token_response,
+                )
 
                 token = await auth.get_token(session)
                 assert token == "test_access_token_12345"
@@ -279,7 +291,11 @@ class TestMyTPUAuth:
             with aioresponses() as m:
                 m.get(f"{BASE_URL}/eportal/", status=200, body=html)
                 m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
-                m.post(f"{BASE_URL}/rest/oauth/token", status=200, payload=mock_token_response)
+                m.post(
+                    f"{BASE_URL}/rest/oauth/token",
+                    status=200,
+                    payload=mock_token_response,
+                )
 
                 token = await auth.get_token(session)
                 assert token == "test_access_token_12345"
@@ -312,7 +328,11 @@ class TestMyTPUAuth:
             with aioresponses() as m:
                 m.get(f"{BASE_URL}/eportal/", status=200, body=html)
                 m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
-                m.post(f"{BASE_URL}/rest/oauth/token", status=200, payload=mock_token_response)
+                m.post(
+                    f"{BASE_URL}/rest/oauth/token",
+                    status=200,
+                    payload=mock_token_response,
+                )
 
                 header = await auth.get_auth_header(session)
                 assert header == {"Authorization": "Bearer test_access_token_12345"}

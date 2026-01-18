@@ -1,6 +1,5 @@
 """Tests for mytpu models."""
 
-import pytest
 from datetime import datetime
 
 from custom_components.mytpu.models import Service, ServiceType, UsageReading

@@ -1,7 +1,7 @@
 """Tests for mytpu sensor platform."""
 
 from datetime import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from homeassistant.components.sensor import SensorDeviceClass
@@ -27,7 +27,7 @@ async def test_async_setup_entry_both_services(hass: HomeAssistant, mock_config_
     def mock_add_entities(new_entities):
         entities.extend(new_entities)
 
-    await async_setup_entry(hass,mock_config_entry, mock_add_entities)
+    await async_setup_entry(hass, mock_config_entry, mock_add_entities)
 
     assert len(entities) == 2
     assert isinstance(entities[0], TPUEnergySensor)
@@ -38,7 +38,8 @@ async def test_async_setup_entry_both_services(hass: HomeAssistant, mock_config_
 async def test_async_setup_entry_power_only(hass: HomeAssistant, mock_power_service):
     """Test setting up sensor for power only."""
     import json
-    from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
+
+    from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
     # Create config entry with only power service
@@ -70,7 +71,7 @@ async def test_async_setup_entry_power_only(hass: HomeAssistant, mock_power_serv
     def mock_add_entities(new_entities):
         entities.extend(new_entities)
 
-    await async_setup_entry(hass,power_only_entry, mock_add_entities)
+    await async_setup_entry(hass, power_only_entry, mock_add_entities)
 
     assert len(entities) == 1
     assert isinstance(entities[0], TPUEnergySensor)
@@ -80,7 +81,8 @@ async def test_async_setup_entry_power_only(hass: HomeAssistant, mock_power_serv
 async def test_async_setup_entry_water_only(hass: HomeAssistant, mock_water_service):
     """Test setting up sensor for water only."""
     import json
-    from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
+
+    from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
     # Create config entry with only water service
@@ -112,7 +114,7 @@ async def test_async_setup_entry_water_only(hass: HomeAssistant, mock_water_serv
     def mock_add_entities(new_entities):
         entities.extend(new_entities)
 
-    await async_setup_entry(hass,water_only_entry, mock_add_entities)
+    await async_setup_entry(hass, water_only_entry, mock_add_entities)
 
     assert len(entities) == 1
     assert isinstance(entities[0], TPUWaterSensor)

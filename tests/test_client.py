@@ -1,7 +1,7 @@
 """Tests for mytpu API client."""
 
-from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import datetime
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from aioresponses import aioresponses
@@ -52,15 +52,23 @@ class TestMyTPUClient:
         await client.close()
 
     @pytest.mark.asyncio
-    async def test_get_account_info_success(self, mock_account_info, mock_token_response):
+    async def test_get_account_info_success(
+        self, mock_account_info, mock_token_response
+    ):
         """Test successful account info retrieval."""
         client = MyTPUClient("user", "pass")
 
-        with patch.object(client._auth, "get_token", new=AsyncMock(return_value="test_token")):
+        with patch.object(
+            client._auth, "get_token", new=AsyncMock(return_value="test_token")
+        ):
             # Mock the _token attribute to set customer_id
             from custom_components.mytpu.auth import TokenInfo
+
             client._auth._token = TokenInfo(
-                access_token="test", refresh_token="refresh", expires_at=9999999999, customer_id="CUST123"
+                access_token="test",
+                refresh_token="refresh",
+                expires_at=9999999999,
+                customer_id="CUST123",
             )
             async with client:
                 with aioresponses() as m:
@@ -104,13 +112,16 @@ class TestMyTPUClient:
                     # Set token after get_token is called
                     def set_token(*args, **kwargs):
                         client._auth._token = TokenInfo(
-                            access_token="test", refresh_token="refresh", expires_at=9999999999, customer_id="CUST123"
+                            access_token="test",
+                            refresh_token="refresh",
+                            expires_at=9999999999,
+                            customer_id="CUST123",
                         )
                         return "test_token"
 
                     mock_get_token.side_effect = set_token
 
-                    result = await client.get_account_info()
+                    await client.get_account_info()
 
                     # Should have called get_token to authenticate
                     # Note: get_token is called twice - once to get customer_id, once in _request
@@ -121,10 +132,16 @@ class TestMyTPUClient:
         """Test handling of API error during account info fetch."""
         client = MyTPUClient("user", "pass")
 
-        with patch.object(client._auth, "get_token", new=AsyncMock(return_value="test_token")):
+        with patch.object(
+            client._auth, "get_token", new=AsyncMock(return_value="test_token")
+        ):
             from custom_components.mytpu.auth import TokenInfo
+
             client._auth._token = TokenInfo(
-                access_token="test", refresh_token="refresh", expires_at=9999999999, customer_id="CUST123"
+                access_token="test",
+                refresh_token="refresh",
+                expires_at=9999999999,
+                customer_id="CUST123",
             )
             async with client:
                 with aioresponses() as m:
@@ -142,50 +159,62 @@ class TestMyTPUClient:
         """Test that get_services returns cached services."""
         client = MyTPUClient("user", "pass")
 
-        with patch.object(client._auth, "get_token", new=AsyncMock(return_value="test_token")):
+        with patch.object(
+            client._auth, "get_token", new=AsyncMock(return_value="test_token")
+        ):
             from custom_components.mytpu.auth import TokenInfo
+
             client._auth._token = TokenInfo(
-                access_token="test", refresh_token="refresh", expires_at=9999999999, customer_id="CUST123"
+                access_token="test",
+                refresh_token="refresh",
+                expires_at=9999999999,
+                customer_id="CUST123",
             )
             async with client:
                 with aioresponses() as m:
-                        m.post(
-                            f"{BASE_URL}/rest/account/customer/",
-                            status=200,
-                            payload=mock_account_info,
-                        )
+                    m.post(
+                        f"{BASE_URL}/rest/account/customer/",
+                        status=200,
+                        payload=mock_account_info,
+                    )
 
-                        # First call fetches account info
-                        services1 = await client.get_services()
-                        assert len(services1) == 2
+                    # First call fetches account info
+                    services1 = await client.get_services()
+                    assert len(services1) == 2
 
-                        # Second call uses cached services (no new request)
-                        services2 = await client.get_services()
-                        assert len(services2) == 2
-                        assert services1 is services2
+                    # Second call uses cached services (no new request)
+                    services2 = await client.get_services()
+                    assert len(services2) == 2
+                    assert services1 is services2
 
     @pytest.mark.asyncio
     async def test_get_services_fetches_if_none(self, mock_account_info):
         """Test that get_services fetches account info if services not cached."""
         client = MyTPUClient("user", "pass")
 
-        with patch.object(client._auth, "get_token", new=AsyncMock(return_value="test_token")):
+        with patch.object(
+            client._auth, "get_token", new=AsyncMock(return_value="test_token")
+        ):
             from custom_components.mytpu.auth import TokenInfo
+
             client._auth._token = TokenInfo(
-                access_token="test", refresh_token="refresh", expires_at=9999999999, customer_id="CUST123"
+                access_token="test",
+                refresh_token="refresh",
+                expires_at=9999999999,
+                customer_id="CUST123",
             )
             async with client:
                 with aioresponses() as m:
-                        m.post(
-                            f"{BASE_URL}/rest/account/customer/",
-                            status=200,
-                            payload=mock_account_info,
-                        )
+                    m.post(
+                        f"{BASE_URL}/rest/account/customer/",
+                        status=200,
+                        payload=mock_account_info,
+                    )
 
-                        services = await client.get_services()
+                    services = await client.get_services()
 
-                        assert len(services) == 2
-                        assert services[0].meter_number == "MOCK_POWER_METER"
+                    assert len(services) == 2
+                    assert services[0].meter_number == "MOCK_POWER_METER"
 
     @pytest.mark.asyncio
     async def test_get_usage_success(
@@ -195,31 +224,37 @@ class TestMyTPUClient:
         client = MyTPUClient("user", "pass")
         client._account_context = mock_account_info["accountContext"]
 
-        with patch.object(client._auth, "get_token", new=AsyncMock(return_value="test_token")):
+        with patch.object(
+            client._auth, "get_token", new=AsyncMock(return_value="test_token")
+        ):
             from custom_components.mytpu.auth import TokenInfo
+
             client._auth._token = TokenInfo(
-                access_token="test", refresh_token="refresh", expires_at=9999999999, customer_id="CUST123"
+                access_token="test",
+                refresh_token="refresh",
+                expires_at=9999999999,
+                customer_id="CUST123",
             )
             async with client:
                 with aioresponses() as m:
-                        m.post(
-                            f"{BASE_URL}/rest/usage/month",
-                            status=200,
-                            payload=mock_usage_response,
-                        )
+                    m.post(
+                        f"{BASE_URL}/rest/usage/month",
+                        status=200,
+                        payload=mock_usage_response,
+                    )
 
-                        from_date = datetime(2026, 1, 1)
-                        to_date = datetime(2026, 1, 5)
-                        readings = await client.get_usage(
-                            mock_power_service, from_date, to_date
-                        )
+                    from_date = datetime(2026, 1, 1)
+                    to_date = datetime(2026, 1, 5)
+                    readings = await client.get_usage(
+                        mock_power_service, from_date, to_date
+                    )
 
-                        assert len(readings) == 2
-                        assert readings[0].date == datetime(2026, 1, 1)
-                        assert readings[0].consumption == 25.5
-                        assert readings[0].unit == "kWh"
-                        assert readings[1].date == datetime(2026, 1, 2)
-                        assert readings[1].consumption == 28.3
+                    assert len(readings) == 2
+                    assert readings[0].date == datetime(2026, 1, 1)
+                    assert readings[0].consumption == 25.5
+                    assert readings[0].unit == "kWh"
+                    assert readings[1].date == datetime(2026, 1, 2)
+                    assert readings[1].consumption == 28.3
 
     @pytest.mark.asyncio
     async def test_get_usage_default_dates(
@@ -229,22 +264,28 @@ class TestMyTPUClient:
         client = MyTPUClient("user", "pass")
         client._account_context = mock_account_info["accountContext"]
 
-        with patch.object(client._auth, "get_token", new=AsyncMock(return_value="test_token")):
+        with patch.object(
+            client._auth, "get_token", new=AsyncMock(return_value="test_token")
+        ):
             from custom_components.mytpu.auth import TokenInfo
+
             client._auth._token = TokenInfo(
-                access_token="test", refresh_token="refresh", expires_at=9999999999, customer_id="CUST123"
+                access_token="test",
+                refresh_token="refresh",
+                expires_at=9999999999,
+                customer_id="CUST123",
             )
             async with client:
                 with aioresponses() as m:
-                        m.post(
-                            f"{BASE_URL}/rest/usage/month",
-                            status=200,
-                            payload=mock_usage_response,
-                        )
+                    m.post(
+                        f"{BASE_URL}/rest/usage/month",
+                        status=200,
+                        payload=mock_usage_response,
+                    )
 
-                        readings = await client.get_usage(mock_power_service)
+                    readings = await client.get_usage(mock_power_service)
 
-                        assert len(readings) == 2
+                    assert len(readings) == 2
 
     @pytest.mark.asyncio
     async def test_get_usage_fetches_account_info_if_needed(
@@ -253,28 +294,34 @@ class TestMyTPUClient:
         """Test that get_usage fetches account info if not cached."""
         client = MyTPUClient("user", "pass")
 
-        with patch.object(client._auth, "get_token", new=AsyncMock(return_value="test_token")):
+        with patch.object(
+            client._auth, "get_token", new=AsyncMock(return_value="test_token")
+        ):
             from custom_components.mytpu.auth import TokenInfo
+
             client._auth._token = TokenInfo(
-                access_token="test", refresh_token="refresh", expires_at=9999999999, customer_id="CUST123"
+                access_token="test",
+                refresh_token="refresh",
+                expires_at=9999999999,
+                customer_id="CUST123",
             )
             async with client:
                 with aioresponses() as m:
-                        m.post(
-                            f"{BASE_URL}/rest/account/customer/",
-                            status=200,
-                            payload=mock_account_info,
-                        )
-                        m.post(
-                            f"{BASE_URL}/rest/usage/month",
-                            status=200,
-                            payload=mock_usage_response,
-                        )
+                    m.post(
+                        f"{BASE_URL}/rest/account/customer/",
+                        status=200,
+                        payload=mock_account_info,
+                    )
+                    m.post(
+                        f"{BASE_URL}/rest/usage/month",
+                        status=200,
+                        payload=mock_usage_response,
+                    )
 
-                        readings = await client.get_usage(mock_power_service)
+                    readings = await client.get_usage(mock_power_service)
 
-                        assert client._account_context is not None
-                        assert len(readings) == 2
+                    assert client._account_context is not None
+                    assert len(readings) == 2
 
     @pytest.mark.asyncio
     async def test_get_usage_with_optional_fields(
@@ -298,22 +345,28 @@ class TestMyTPUClient:
         client = MyTPUClient("user", "pass")
         client._account_context = mock_account_info["accountContext"]
 
-        with patch.object(client._auth, "get_token", new=AsyncMock(return_value="test_token")):
+        with patch.object(
+            client._auth, "get_token", new=AsyncMock(return_value="test_token")
+        ):
             from custom_components.mytpu.auth import TokenInfo
+
             client._auth._token = TokenInfo(
-                access_token="test", refresh_token="refresh", expires_at=9999999999, customer_id="CUST123"
+                access_token="test",
+                refresh_token="refresh",
+                expires_at=9999999999,
+                customer_id="CUST123",
             )
             async with client:
                 with aioresponses() as m:
-                        m.post(
-                            f"{BASE_URL}/rest/usage/month",
-                            status=200,
-                            payload=mock_usage_response,
-                        )
+                    m.post(
+                        f"{BASE_URL}/rest/usage/month",
+                        status=200,
+                        payload=mock_usage_response,
+                    )
 
-                        await client.get_usage(service)
+                    await client.get_usage(service)
 
-                        # Verify the request was made (aioresponses will validate)
+                    # Verify the request was made (aioresponses will validate)
 
     @pytest.mark.asyncio
     async def test_get_usage_filters_invalid_dates(
@@ -339,23 +392,29 @@ class TestMyTPUClient:
         client = MyTPUClient("user", "pass")
         client._account_context = mock_account_info["accountContext"]
 
-        with patch.object(client._auth, "get_token", new=AsyncMock(return_value="test_token")):
+        with patch.object(
+            client._auth, "get_token", new=AsyncMock(return_value="test_token")
+        ):
             from custom_components.mytpu.auth import TokenInfo
+
             client._auth._token = TokenInfo(
-                access_token="test", refresh_token="refresh", expires_at=9999999999, customer_id="CUST123"
+                access_token="test",
+                refresh_token="refresh",
+                expires_at=9999999999,
+                customer_id="CUST123",
             )
             async with client:
                 with aioresponses() as m:
-                        m.post(
-                            f"{BASE_URL}/rest/usage/month",
-                            status=200,
-                            payload=response_with_invalid,
-                        )
+                    m.post(
+                        f"{BASE_URL}/rest/usage/month",
+                        status=200,
+                        payload=response_with_invalid,
+                    )
 
-                        readings = await client.get_usage(mock_power_service)
+                    readings = await client.get_usage(mock_power_service)
 
-                        # Should only have 2 readings (invalid one filtered out)
-                        assert len(readings) == 2
+                    # Should only have 2 readings (invalid one filtered out)
+                    assert len(readings) == 2
 
     @pytest.mark.asyncio
     async def test_get_power_usage(
@@ -365,27 +424,31 @@ class TestMyTPUClient:
         client = MyTPUClient("user", "pass")
         client._account_context = mock_account_info["accountContext"]
 
-        with patch.object(client._auth, "get_token", new=AsyncMock(return_value="test_token")):
+        with patch.object(
+            client._auth, "get_token", new=AsyncMock(return_value="test_token")
+        ):
             from custom_components.mytpu.auth import TokenInfo
+
             client._auth._token = TokenInfo(
-                access_token="test", refresh_token="refresh", expires_at=9999999999, customer_id="CUST123"
+                access_token="test",
+                refresh_token="refresh",
+                expires_at=9999999999,
+                customer_id="CUST123",
             )
             async with client:
                 with aioresponses() as m:
-                        m.post(
-                            f"{BASE_URL}/rest/usage/month",
-                            status=200,
-                            payload=mock_usage_response,
-                        )
+                    m.post(
+                        f"{BASE_URL}/rest/usage/month",
+                        status=200,
+                        payload=mock_usage_response,
+                    )
 
-                        readings = await client.get_power_usage(mock_power_service)
+                    readings = await client.get_power_usage(mock_power_service)
 
-                        assert len(readings) == 2
+                    assert len(readings) == 2
 
     @pytest.mark.asyncio
-    async def test_get_water_usage(
-        self, mock_water_service, mock_account_info
-    ):
+    async def test_get_water_usage(self, mock_water_service, mock_account_info):
         """Test get_water_usage convenience method."""
         water_usage_response = {
             "history": [
@@ -400,23 +463,29 @@ class TestMyTPUClient:
         client = MyTPUClient("user", "pass")
         client._account_context = mock_account_info["accountContext"]
 
-        with patch.object(client._auth, "get_token", new=AsyncMock(return_value="test_token")):
+        with patch.object(
+            client._auth, "get_token", new=AsyncMock(return_value="test_token")
+        ):
             from custom_components.mytpu.auth import TokenInfo
+
             client._auth._token = TokenInfo(
-                access_token="test", refresh_token="refresh", expires_at=9999999999, customer_id="CUST123"
+                access_token="test",
+                refresh_token="refresh",
+                expires_at=9999999999,
+                customer_id="CUST123",
             )
             async with client:
                 with aioresponses() as m:
-                        m.post(
-                            f"{BASE_URL}/rest/usage/month",
-                            status=200,
-                            payload=water_usage_response,
-                        )
+                    m.post(
+                        f"{BASE_URL}/rest/usage/month",
+                        status=200,
+                        payload=water_usage_response,
+                    )
 
-                        readings = await client.get_water_usage(mock_water_service)
+                    readings = await client.get_water_usage(mock_water_service)
 
-                        assert len(readings) == 1
-                        assert readings[0].unit == "CCF"
+                    assert len(readings) == 1
+                    assert readings[0].unit == "CCF"
 
     @pytest.mark.asyncio
     async def test_close(self):

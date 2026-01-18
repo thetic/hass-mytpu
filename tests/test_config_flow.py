@@ -47,7 +47,9 @@ async def test_validate_and_fetch_services_success(
 
 
 @pytest.mark.asyncio
-async def test_validate_and_fetch_services_auth_error(hass: HomeAssistant, mock_credentials):
+async def test_validate_and_fetch_services_auth_error(
+    hass: HomeAssistant, mock_credentials
+):
     """Test validation with invalid credentials."""
     with patch("custom_components.mytpu.config_flow.MyTPUClient") as mock_client_class:
         mock_client = AsyncMock()
@@ -144,9 +146,7 @@ class TestTPUConfigFlow:
             assert result["errors"] == {"base": "cannot_connect"}
 
     @pytest.mark.asyncio
-    async def test_user_step_invalid_auth(
-        self, hass: HomeAssistant, mock_credentials
-    ):
+    async def test_user_step_invalid_auth(self, hass: HomeAssistant, mock_credentials):
         """Test user step with invalid credentials."""
         with patch(
             "custom_components.mytpu.config_flow.validate_and_fetch_services"
@@ -166,9 +166,7 @@ class TestTPUConfigFlow:
             assert result["errors"] == {"base": "invalid_auth"}
 
     @pytest.mark.asyncio
-    async def test_user_step_unknown_error(
-        self, hass: HomeAssistant, mock_credentials
-    ):
+    async def test_user_step_unknown_error(self, hass: HomeAssistant, mock_credentials):
         """Test user step with unexpected error."""
         with patch(
             "custom_components.mytpu.config_flow.validate_and_fetch_services"
@@ -189,7 +187,11 @@ class TestTPUConfigFlow:
 
     @pytest.mark.asyncio
     async def test_meters_step_both_services(
-        self, hass: HomeAssistant, mock_credentials, mock_power_service, mock_water_service
+        self,
+        hass: HomeAssistant,
+        mock_credentials,
+        mock_power_service,
+        mock_water_service,
     ):
         """Test meters step selecting both power and water."""
         with patch(
