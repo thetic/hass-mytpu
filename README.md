@@ -40,15 +40,7 @@ Or manually:
 2. Click **Add Integration**
 3. Search for "Tacoma Public Utilities"
 4. Enter your MyTPU username and password
-5. Enter your meter information (found in your MyTPU account under Usage)
-
-### Finding Your Meter Information
-
-1. Log in to [myaccount.mytpu.org](https://myaccount.mytpu.org)
-2. Navigate to **Usage** → **Usage Dashboard**
-3. Open your browser's Developer Tools (F12)
-4. Go to the Network tab and look for requests to `/rest/usage/month`
-5. The request body contains your `meterNumber`, `serviceId`, and `serviceNumber`
+5. Select which meters to track (the integration will automatically discover all available meters on your account)
 
 ## Sensors
 
