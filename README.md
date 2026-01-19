@@ -2,6 +2,9 @@
 
 A Home Assistant custom component for tracking energy and water usage from [Tacoma Public Utilities](https://www.mytpu.org/).
 
+> [!NOTE]
+> This is an unofficial, community-developed integration and is not affiliated with, endorsed by, or supported by Tacoma Public Utilities (TPU). Use at your own risk.
+
 ## Features
 
 - Track daily electricity consumption (kWh)
@@ -46,10 +49,10 @@ Or manually:
 
 This integration creates the following sensors:
 
-| Sensor | Description | Unit | Device Class |
-|--------|-------------|------|--------------|
-| Energy Consumption | Daily electricity usage | kWh | energy |
-| Water Consumption | Daily water usage | CCF | water |
+| Sensor             | Description             | Unit | Device Class |
+| ------------------ | ----------------------- | ---- | ------------ |
+| Energy Consumption | Daily electricity usage | kWh  | energy       |
+| Water Consumption  | Daily water usage       | CCF  | water        |
 
 Historical data and cumulative totals are tracked using Home Assistant's statistics system for proper Energy Dashboard integration.
 
