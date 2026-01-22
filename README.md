@@ -1,5 +1,10 @@
 # MyTPU - Tacoma Public Utilities Integration
 
+[![Test](https://github.com/thetic/hass-mytpu/actions/workflows/test.yml/badge.svg)](https://github.com/thetic/hass-mytpu/actions/workflows/test.yml)
+[![codecov](https://codecov.io/gh/thetic/hass-mytpu/graph/badge.svg)](https://codecov.io/gh/thetic/hass-mytpu)
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A Home Assistant custom component for tracking energy and water usage from [Tacoma Public Utilities](https://www.mytpu.org/).
 
 > [!NOTE]
