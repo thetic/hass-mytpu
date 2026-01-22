@@ -9,26 +9,11 @@ jobs:
     name: Pytest
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-
-      - name: Set up Python
-        run: uv python install 3.13
-      - name: Install dependencies
-        run: uv sync --dev
-
-      - name: Run tests with coverage
-        run: uv run pytest --cov --cov-report=xml --cov-report=term
-
-      - name: Upload coverage reports
-        uses: codecov/codecov-action@v5
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv run pytest --cov=custom_components/mytpu --cov-report=xml
+      - uses: codecov/codecov-action@v5
         with:
-          files: ./coverage.xml
-          flags: unittests
-          name: codecov-mytpu
-          fail_ci_if_error: false
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          fail_ci_if_error: true
