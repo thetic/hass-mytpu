@@ -2,7 +2,7 @@
 
 [![Test](https://github.com/thetic/hass-mytpu/actions/workflows/test.yml/badge.svg)](https://github.com/thetic/hass-mytpu/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/thetic/hass-mytpu/graph/badge.svg)](https://codecov.io/gh/thetic/hass-mytpu)
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A Home Assistant custom component for tracking energy and water usage from [Tacoma Public Utilities](https://www.mytpu.org/).
@@ -28,14 +28,10 @@ A Home Assistant custom component for tracking energy and water usage from [Taco
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=thetic&repository=hass-mytpu&category=integration)
 
-Or manually:
-
 1. Open HACS in Home Assistant
-2. Click the three dots menu and select "Custom repositories"
-3. Add `https://github.com/thetic/hass-mytpu` and select "Integration" as the category
-4. Click "Add"
-5. Search for "Tacoma Public Utilities" and install it
-6. Restart Home Assistant
+2. Search for "Tacoma Public Utilities"
+3. Click "Download"
+4. Restart Home Assistant
 
 ### Manual Installation
 
