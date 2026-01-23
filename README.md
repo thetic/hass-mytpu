@@ -24,8 +24,6 @@ A Home Assistant custom component for tracking energy and water usage from [Taco
 
 ## Installation
 
-### HACS (Recommended)
-
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=thetic&repository=hass-mytpu&category=integration)
 
 1. Open HACS in Home Assistant
@@ -33,10 +31,12 @@ A Home Assistant custom component for tracking energy and water usage from [Taco
 3. Click "Download"
 4. Restart Home Assistant
 
-### Manual Installation
+<details>
+<summary><strong>Manual Installation</strong></summary>
 
 1. Copy the `custom_components/mytpu` folder to your Home Assistant `config/custom_components/` directory
 2. Restart Home Assistant
+</details>
 
 ## Configuration
 
@@ -55,7 +55,7 @@ This integration creates the following sensors:
 | Energy Consumption | Daily electricity usage | kWh  | energy       |
 | Water Consumption  | Daily water usage       | CCF  | water        |
 
-Historical data and cumulative totals are tracked using Home Assistant's statistics system for proper Energy Dashboard integration.
+Historical data and cumulative totals are tracked using Home Assistant's [statistics](https://www.home-assistant.io/integrations/statistics/) system for proper [Energy Dashboard](https://www.home-assistant.io/docs/energy/) integration.
 
 ## Energy Dashboard Setup
 
@@ -67,8 +67,4 @@ Historical data and cumulative totals are tracked using Home Assistant's statist
 
 ## Acknowledgments
 
-This project was inspired by and builds upon the work of [ex-nerd/mytpu](https://github.com/ex-nerd/mytpu), which provided valuable insights into the MyTPU API authentication flow.
-
-## License
-
-MIT
+This project was inspired by and builds upon the work of [ex-nerd/mytpu](https://github.com/ex-nerd/mytpu).
