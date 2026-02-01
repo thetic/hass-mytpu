@@ -238,7 +238,8 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # of the cumulative total.
         if cumulative_sum == 0.0 and readings:
             first_reading_time = dt_util.as_utc(readings[0].date)
-            baseline_time = first_reading_time - timedelta(seconds=1)
+            # Subtract 1 day to get previous day at midnight (valid hour boundary)
+            baseline_time = first_reading_time - timedelta(days=1)
             statistics.append(
                 StatisticData(
                     start=baseline_time,
