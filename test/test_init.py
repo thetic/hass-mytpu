@@ -443,7 +443,8 @@ class TestTPUDataUpdateCoordinator:
         ]
 
         # Mock existing statistics
-        last_stat_time = dt_util.as_utc(datetime(2026, 1, 2))
+        # start is returned as a Unix timestamp (float)
+        last_stat_time = dt_util.as_utc(datetime(2026, 1, 2)).timestamp()
         mock_last_stats = {
             f"{DOMAIN}:p_mock_power_meter_energy": [
                 {
@@ -505,7 +506,8 @@ class TestTPUDataUpdateCoordinator:
         ]
 
         # Mock that we already have data up to Jan 2
-        last_stat_time = dt_util.as_utc(datetime(2026, 1, 2))
+        # start is returned as a Unix timestamp (float)
+        last_stat_time = dt_util.as_utc(datetime(2026, 1, 2)).timestamp()
         mock_last_stats = {
             f"{DOMAIN}:p_mock_power_meter_energy": [
                 {

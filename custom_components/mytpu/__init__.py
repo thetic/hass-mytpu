@@ -199,13 +199,12 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Start cumulative sum from last known value or 0
         cumulative_sum = 0.0
-        last_stat_time: datetime | None = None
+        last_stat_time: float | None = None
         if statistic_id in last_stats:
             last_stat = last_stats[statistic_id][0]
             cumulative_sum = last_stat.get("sum", 0.0)
-            start_value = last_stat.get("start")
-            if isinstance(start_value, datetime):
-                last_stat_time = start_value
+            # start is returned as a Unix timestamp (float), not a datetime
+            last_stat_time = last_stat.get("start")
 
         # Create metadata based on type
         if stat_type == "energy":
@@ -254,7 +253,8 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             start_time = reading.date
 
             # Skip if we've already imported this date
-            if last_stat_time and start_time <= last_stat_time:
+            # Compare using Unix timestamps like opower does
+            if last_stat_time and start_time.timestamp() <= last_stat_time:
                 continue
 
             # Add consumption to cumulative sum

@@ -2,8 +2,10 @@
 
 import contextlib
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
+
+from homeassistant.util import dt as dt_util
 
 
 class ServiceType(Enum):
@@ -32,8 +34,13 @@ class UsageReading:
             with contextlib.suppress(ValueError, TypeError):
                 peak_time = datetime.strptime(data["demandPeakTime"], "%Y-%m-%d %H:%M")
 
+        # Parse date as UTC midnight using dt_util.parse_datetime
+        # Append time and Z to indicate UTC
+        utc_date_str = f"{data['usageDate']}T00:00:00Z"
+        utc_date = dt_util.parse_datetime(utc_date_str)
+
         return cls(
-            date=datetime.strptime(data["usageDate"], "%Y-%m-%d").replace(tzinfo=timezone.utc),
+            date=utc_date,
             consumption=data.get("usageConsumptionValue", 0.0),
             unit=data.get("uom", ""),
             high_temp=data.get("usageHighTemp"),
