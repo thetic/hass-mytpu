@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -28,7 +28,6 @@ from homeassistant.const import (
     UnitOfVolume,
 )
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from homeassistant.util import dt as dt_util
 
 from .client import MyTPUClient
 from .const import (
@@ -199,13 +198,12 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Start cumulative sum from last known value or 0
         cumulative_sum = 0.0
-        last_stat_time: datetime | None = None
+        last_stat_time: float | None = None
         if statistic_id in last_stats:
             last_stat = last_stats[statistic_id][0]
             cumulative_sum = last_stat.get("sum", 0.0)
-            start_value = last_stat.get("start")
-            if isinstance(start_value, datetime):
-                last_stat_time = start_value
+            # start is returned as a Unix timestamp (float), not a datetime
+            last_stat_time = last_stat.get("start")
 
         # Create metadata based on type
         if stat_type == "energy":
@@ -237,7 +235,8 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Energy Dashboard correctly shows the first day's consumption instead
         # of the cumulative total.
         if cumulative_sum == 0.0 and readings:
-            first_reading_time = dt_util.as_utc(readings[0].date)
+            # readings[0].date is already UTC-aware from models.py
+            first_reading_time = readings[0].date
             # Subtract 1 day to get previous day at midnight (valid hour boundary)
             baseline_time = first_reading_time - timedelta(days=1)
             statistics.append(
@@ -249,11 +248,12 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
 
         for reading in readings:
-            # Convert date to UTC datetime at start of day
-            start_time = dt_util.as_utc(reading.date)
+            # reading.date is already UTC-aware from models.py
+            start_time = reading.date
 
             # Skip if we've already imported this date
-            if last_stat_time and start_time <= last_stat_time:
+            # Compare using Unix timestamps like opower does
+            if last_stat_time and start_time.timestamp() <= last_stat_time:
                 continue
 
             # Add consumption to cumulative sum

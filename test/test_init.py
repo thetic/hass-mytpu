@@ -1,7 +1,7 @@
 """Tests for mytpu integration setup and coordinator."""
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -175,19 +175,19 @@ class TestTPUDataUpdateCoordinator:
 
         power_readings = [
             UsageReading(
-                date=datetime(2026, 1, 1),
+                date=datetime(2026, 1, 1, tzinfo=UTC),
                 consumption=25.5,
                 unit="kWh",
             ),
             UsageReading(
-                date=datetime(2026, 1, 2),
+                date=datetime(2026, 1, 2, tzinfo=UTC),
                 consumption=28.3,
                 unit="kWh",
             ),
         ]
         water_readings = [
             UsageReading(
-                date=datetime(2026, 1, 1),
+                date=datetime(2026, 1, 1, tzinfo=UTC),
                 consumption=1.5,
                 unit="CCF",
             ),
@@ -205,7 +205,7 @@ class TestTPUDataUpdateCoordinator:
 
             assert "power" in data
             assert data["power"]["consumption"] == 28.3  # Latest reading
-            assert data["power"]["date"] == datetime(2026, 1, 2)
+            assert data["power"]["date"] == datetime(2026, 1, 2, tzinfo=UTC)
             assert data["power"]["unit"] == "kWh"
 
             assert "water" in data
@@ -376,12 +376,12 @@ class TestTPUDataUpdateCoordinator:
 
         readings = [
             UsageReading(
-                date=datetime(2026, 1, 1),
+                date=datetime(2026, 1, 1, tzinfo=UTC),
                 consumption=25.5,
                 unit="kWh",
             ),
             UsageReading(
-                date=datetime(2026, 1, 2),
+                date=datetime(2026, 1, 2, tzinfo=UTC),
                 consumption=28.3,
                 unit="kWh",
             ),
@@ -436,14 +436,15 @@ class TestTPUDataUpdateCoordinator:
 
         readings = [
             UsageReading(
-                date=datetime(2026, 1, 3),
+                date=datetime(2026, 1, 3, tzinfo=UTC),
                 consumption=30.0,
                 unit="kWh",
             ),
         ]
 
         # Mock existing statistics
-        last_stat_time = dt_util.as_utc(datetime(2026, 1, 2))
+        # start is returned as a Unix timestamp (float)
+        last_stat_time = dt_util.as_utc(datetime(2026, 1, 2)).timestamp()
         mock_last_stats = {
             f"{DOMAIN}:p_mock_power_meter_energy": [
                 {
@@ -493,19 +494,20 @@ class TestTPUDataUpdateCoordinator:
 
         readings = [
             UsageReading(
-                date=datetime(2026, 1, 1),
+                date=datetime(2026, 1, 1, tzinfo=UTC),
                 consumption=25.5,
                 unit="kWh",
             ),
             UsageReading(
-                date=datetime(2026, 1, 2),
+                date=datetime(2026, 1, 2, tzinfo=UTC),
                 consumption=28.3,
                 unit="kWh",
             ),
         ]
 
         # Mock that we already have data up to Jan 2
-        last_stat_time = dt_util.as_utc(datetime(2026, 1, 2))
+        # start is returned as a Unix timestamp (float)
+        last_stat_time = dt_util.as_utc(datetime(2026, 1, 2)).timestamp()
         mock_last_stats = {
             f"{DOMAIN}:p_mock_power_meter_energy": [
                 {
@@ -548,7 +550,7 @@ class TestTPUDataUpdateCoordinator:
 
         readings = [
             UsageReading(
-                date=datetime(2026, 1, 1),
+                date=datetime(2026, 1, 1, tzinfo=UTC),
                 consumption=1.5,
                 unit="CCF",
             ),
@@ -599,7 +601,7 @@ class TestTPUDataUpdateCoordinator:
 
         readings = [
             UsageReading(
-                date=datetime(2026, 1, 1),
+                date=datetime(2026, 1, 1, tzinfo=UTC),
                 consumption=10.0,
                 unit="kWh",
             ),
