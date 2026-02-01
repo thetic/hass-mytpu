@@ -408,11 +408,14 @@ class TestTPUDataUpdateCoordinator:
             assert "TPU Energy" in metadata["name"]
 
             # Verify statistics (statistics items are dicts)
-            assert len(statistics) == 2
-            assert statistics[0]["state"] == 25.5
-            assert statistics[0]["sum"] == 25.5  # Cumulative
-            assert statistics[1]["state"] == 28.3
-            assert statistics[1]["sum"] == 53.8  # 25.5 + 28.3
+            # Now includes baseline statistic at the beginning
+            assert len(statistics) == 3
+            assert statistics[0]["state"] == 0.0
+            assert statistics[0]["sum"] == 0.0  # Baseline
+            assert statistics[1]["state"] == 25.5
+            assert statistics[1]["sum"] == 25.5  # Cumulative
+            assert statistics[2]["state"] == 28.3
+            assert statistics[2]["sum"] == 53.8  # 25.5 + 28.3
 
     @pytest.mark.asyncio
     async def test_import_statistics_with_previous_data(
