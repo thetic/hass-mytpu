@@ -231,6 +231,23 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Convert readings to StatisticData
         statistics: list[StatisticData] = []
+
+        # If this is the first import (no previous statistics), add a baseline
+        # statistic with sum=0 just before the first reading. This ensures the
+        # Energy Dashboard correctly shows the first day's consumption instead
+        # of the cumulative total.
+        if cumulative_sum == 0.0 and readings:
+            first_reading_time = dt_util.as_utc(readings[0].date)
+            # Subtract 1 day to get previous day at midnight (valid hour boundary)
+            baseline_time = first_reading_time - timedelta(days=1)
+            statistics.append(
+                StatisticData(
+                    start=baseline_time,
+                    state=0.0,
+                    sum=0.0,
+                )
+            )
+
         for reading in readings:
             # Convert date to UTC datetime at start of day
             start_time = dt_util.as_utc(reading.date)
