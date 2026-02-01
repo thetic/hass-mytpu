@@ -237,7 +237,8 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Energy Dashboard correctly shows the first day's consumption instead
         # of the cumulative total.
         if cumulative_sum == 0.0 and readings:
-            first_reading_time = dt_util.as_utc(readings[0].date)
+            # readings[0].date is already UTC-aware from models.py
+            first_reading_time = readings[0].date
             # Subtract 1 day to get previous day at midnight (valid hour boundary)
             baseline_time = first_reading_time - timedelta(days=1)
             statistics.append(
@@ -249,8 +250,8 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
 
         for reading in readings:
-            # Convert date to UTC datetime at start of day
-            start_time = dt_util.as_utc(reading.date)
+            # reading.date is already UTC-aware from models.py
+            start_time = reading.date
 
             # Skip if we've already imported this date
             if last_stat_time and start_time <= last_stat_time:

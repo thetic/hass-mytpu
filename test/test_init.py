@@ -1,7 +1,7 @@
 """Tests for mytpu integration setup and coordinator."""
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -175,19 +175,19 @@ class TestTPUDataUpdateCoordinator:
 
         power_readings = [
             UsageReading(
-                date=datetime(2026, 1, 1),
+                date=datetime(2026, 1, 1, tzinfo=timezone.utc),
                 consumption=25.5,
                 unit="kWh",
             ),
             UsageReading(
-                date=datetime(2026, 1, 2),
+                date=datetime(2026, 1, 2, tzinfo=timezone.utc),
                 consumption=28.3,
                 unit="kWh",
             ),
         ]
         water_readings = [
             UsageReading(
-                date=datetime(2026, 1, 1),
+                date=datetime(2026, 1, 1, tzinfo=timezone.utc),
                 consumption=1.5,
                 unit="CCF",
             ),
@@ -205,7 +205,7 @@ class TestTPUDataUpdateCoordinator:
 
             assert "power" in data
             assert data["power"]["consumption"] == 28.3  # Latest reading
-            assert data["power"]["date"] == datetime(2026, 1, 2)
+            assert data["power"]["date"] == datetime(2026, 1, 2, tzinfo=timezone.utc)
             assert data["power"]["unit"] == "kWh"
 
             assert "water" in data
@@ -376,12 +376,12 @@ class TestTPUDataUpdateCoordinator:
 
         readings = [
             UsageReading(
-                date=datetime(2026, 1, 1),
+                date=datetime(2026, 1, 1, tzinfo=timezone.utc),
                 consumption=25.5,
                 unit="kWh",
             ),
             UsageReading(
-                date=datetime(2026, 1, 2),
+                date=datetime(2026, 1, 2, tzinfo=timezone.utc),
                 consumption=28.3,
                 unit="kWh",
             ),
@@ -436,7 +436,7 @@ class TestTPUDataUpdateCoordinator:
 
         readings = [
             UsageReading(
-                date=datetime(2026, 1, 3),
+                date=datetime(2026, 1, 3, tzinfo=timezone.utc),
                 consumption=30.0,
                 unit="kWh",
             ),
@@ -493,12 +493,12 @@ class TestTPUDataUpdateCoordinator:
 
         readings = [
             UsageReading(
-                date=datetime(2026, 1, 1),
+                date=datetime(2026, 1, 1, tzinfo=timezone.utc),
                 consumption=25.5,
                 unit="kWh",
             ),
             UsageReading(
-                date=datetime(2026, 1, 2),
+                date=datetime(2026, 1, 2, tzinfo=timezone.utc),
                 consumption=28.3,
                 unit="kWh",
             ),
@@ -548,7 +548,7 @@ class TestTPUDataUpdateCoordinator:
 
         readings = [
             UsageReading(
-                date=datetime(2026, 1, 1),
+                date=datetime(2026, 1, 1, tzinfo=timezone.utc),
                 consumption=1.5,
                 unit="CCF",
             ),
@@ -599,7 +599,7 @@ class TestTPUDataUpdateCoordinator:
 
         readings = [
             UsageReading(
-                date=datetime(2026, 1, 1),
+                date=datetime(2026, 1, 1, tzinfo=timezone.utc),
                 consumption=10.0,
                 unit="kWh",
             ),
