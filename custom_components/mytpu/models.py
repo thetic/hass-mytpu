@@ -38,6 +38,8 @@ class UsageReading:
         # Append time and Z to indicate UTC
         utc_date_str = f"{data['usageDate']}T00:00:00Z"
         utc_date = dt_util.parse_datetime(utc_date_str)
+        if utc_date is None:
+            raise ValueError(f"Failed to parse date: {data['usageDate']}")
 
         return cls(
             date=utc_date,
