@@ -1,6 +1,6 @@
 """Tests for mytpu API client."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -294,10 +294,10 @@ class TestMyTPUClient:
                     )
 
                     assert len(readings) == 2
-                    assert readings[0].date == datetime(2026, 1, 1)
+                    assert readings[0].date == datetime(2026, 1, 1, tzinfo=timezone.utc)
                     assert readings[0].consumption == 25.5
                     assert readings[0].unit == "kWh"
-                    assert readings[1].date == datetime(2026, 1, 2)
+                    assert readings[1].date == datetime(2026, 1, 2, tzinfo=timezone.utc)
                     assert readings[1].consumption == 28.3
 
     @pytest.mark.asyncio

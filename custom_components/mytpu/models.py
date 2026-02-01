@@ -2,7 +2,7 @@
 
 import contextlib
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 
@@ -33,7 +33,7 @@ class UsageReading:
                 peak_time = datetime.strptime(data["demandPeakTime"], "%Y-%m-%d %H:%M")
 
         return cls(
-            date=datetime.strptime(data["usageDate"], "%Y-%m-%d"),
+            date=datetime.strptime(data["usageDate"], "%Y-%m-%d").replace(tzinfo=timezone.utc),
             consumption=data.get("usageConsumptionValue", 0.0),
             unit=data.get("uom", ""),
             high_temp=data.get("usageHighTemp"),

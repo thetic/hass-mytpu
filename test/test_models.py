@@ -1,6 +1,6 @@
 """Tests for mytpu models."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from custom_components.mytpu.models import Service, ServiceType, UsageReading
 
@@ -37,7 +37,7 @@ class TestUsageReading:
         }
         reading = UsageReading.from_api_response(data)
 
-        assert reading.date == datetime(2026, 1, 15)
+        assert reading.date == datetime(2026, 1, 15, tzinfo=timezone.utc)
         assert reading.consumption == 25.5
         assert reading.unit == "kWh"
         assert reading.high_temp == 45.0
@@ -51,7 +51,7 @@ class TestUsageReading:
         }
         reading = UsageReading.from_api_response(data)
 
-        assert reading.date == datetime(2026, 1, 15)
+        assert reading.date == datetime(2026, 1, 15, tzinfo=timezone.utc)
         assert reading.consumption == 0.0
         assert reading.unit == ""
         assert reading.high_temp is None
