@@ -29,7 +29,8 @@ from homeassistant.const import (
 )
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .client import MyTPUClient
+from .auth import AuthError
+from .client import MyTPUClient, MyTPUError
 from .const import (
     CONF_POWER_SERVICE,
     CONF_TOKEN_DATA,
@@ -176,8 +177,13 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             return data
 
+        except AuthError as err:
+            raise UpdateFailed(f"Authentication failed: {err}") from err
+        except MyTPUError as err:
+            raise UpdateFailed(f"API request failed: {err}") from err
         except Exception as err:
-            raise UpdateFailed(f"Error communicating with TPU: {err}") from err
+            _LOGGER.exception("Unexpected error communicating with TPU")
+            raise UpdateFailed(f"Unexpected error communicating with TPU: {err}") from err
 
     async def _save_token_data(self) -> None:
         """Save updated token data to config entry if changed."""

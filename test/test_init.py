@@ -193,8 +193,15 @@ class TestTPUDataUpdateCoordinator:
             ),
         ]
 
-        mock_client.get_power_usage = AsyncMock(return_value=power_readings)
-        mock_client.get_water_usage = AsyncMock(return_value=water_readings)
+        # Combine readings, or adjust mock if get_usage handles service types internally
+        def mock_get_usage_side_effect(service, *args, **kwargs):
+            if service.service_type == ServiceType.POWER:
+                return power_readings
+            if service.service_type == ServiceType.WATER:
+                return water_readings
+            return []
+
+        mock_client.get_usage = AsyncMock(side_effect=mock_get_usage_side_effect)
 
         coordinator = TPUDataUpdateCoordinator(hass, mock_client, mock_config_entry)
 
@@ -224,7 +231,7 @@ class TestTPUDataUpdateCoordinator:
 
         mock_client = AsyncMock()
         mock_client.get_account_info = AsyncMock()
-        mock_client.get_power_usage = AsyncMock(return_value=[])
+        mock_client.get_usage = AsyncMock(return_value=[])
         mock_client.get_token_data = MagicMock(return_value=None)
 
         config_entry = MockConfigEntry(
@@ -249,7 +256,8 @@ class TestTPUDataUpdateCoordinator:
 
         coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
-        data = await coordinator._async_update_data()
+        with patch("custom_components.mytpu.get_last_statistics", return_value={}):
+            data = await coordinator._async_update_data()
 
         assert data == {}
 
@@ -285,7 +293,7 @@ class TestTPUDataUpdateCoordinator:
 
         coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
-        with pytest.raises(UpdateFailed, match="Error communicating with TPU"):
+        with pytest.raises(UpdateFailed, match="Unexpected error communicating with TPU: API Error"):
             await coordinator._async_update_data()
 
     @pytest.mark.asyncio
