@@ -2,6 +2,18 @@
 name = "hass-mytpu"
 version = "0.0.0"
 requires-python = ">=3.13"
+description = "A Home Assistant custom component for Tacoma Public Utilities."
+authors = [{ name = "Chad Condon", email = "chad@chadcondon.com" }]
+readme = "README.md"
+license = { file = "LICENSE" }
+
+dependencies = ["aiohttp>=3.8.0"]
+
+[project.urls]
+Homepage = "https://github.com/thetic/hass-mytpu"
+Repository = "https://github.com/thetic/hass-mytpu"
+"Issue Tracker" = "https://github.com/thetic/hass-mytpu/issues"
+
 
 [dependency-groups]
 dev = [

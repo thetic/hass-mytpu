@@ -167,24 +167,6 @@ class MyTPUClient:
 
         return readings
 
-    async def get_power_usage(
-        self,
-        service: Service,
-        from_date: datetime | None = None,
-        to_date: datetime | None = None,
-    ) -> list[UsageReading]:
-        """Convenience method to fetch power usage."""
-        return await self.get_usage(service, from_date, to_date)
-
-    async def get_water_usage(
-        self,
-        service: Service,
-        from_date: datetime | None = None,
-        to_date: datetime | None = None,
-    ) -> list[UsageReading]:
-        """Convenience method to fetch water usage."""
-        return await self.get_usage(service, from_date, to_date)
-
     def get_token_data(self) -> dict | None:
         """Get current token data for storage."""
         return self._auth.get_token_data()
