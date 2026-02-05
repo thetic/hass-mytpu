@@ -174,6 +174,8 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return data
 
         except AuthError as err:
+            # Trigger reauth flow so user is prompted to re-authenticate
+            self.config_entry.async_start_reauth(self.hass)
             raise UpdateFailed(f"Authentication failed: {err}") from err
         except MyTPUError as err:
             raise UpdateFailed(f"API request failed: {err}") from err
