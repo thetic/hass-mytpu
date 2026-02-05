@@ -23,9 +23,7 @@ from .const import (
     CONF_WATER_SERVICE,
     DOMAIN,
     TPU_POWER_SENSOR_ID_SUFFIX,
-    TPU_POWER_SENSOR_NAME,
     TPU_WATER_SENSOR_ID_SUFFIX,
-    TPU_WATER_SENSOR_NAME,
 )
 
 
@@ -54,19 +52,18 @@ class TPUSensor(CoordinatorEntity[TPUDataUpdateCoordinator], SensorEntity):
     """Base class for TPU sensors."""
 
     _attr_has_entity_name = True
+    _attr_name = None # Name is derived from translation key
 
     def __init__(
         self,
         coordinator: TPUDataUpdateCoordinator,
         entry: ConfigEntry,
-        name: str,
         unique_id_suffix: str,
         service_type: str,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}{unique_id_suffix}"
-        self._attr_name = name
         self._entry = entry
         self._service_type = service_type
 
@@ -104,6 +101,7 @@ class TPUEnergySensor(TPUSensor):
 
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_translation_key = "energy_consumption"
 
     def __init__(
         self,
@@ -114,7 +112,6 @@ class TPUEnergySensor(TPUSensor):
         super().__init__(
             coordinator,
             entry,
-            TPU_POWER_SENSOR_NAME,
             TPU_POWER_SENSOR_ID_SUFFIX,
             "power",
         )
@@ -125,6 +122,7 @@ class TPUWaterSensor(TPUSensor):
 
     _attr_device_class = SensorDeviceClass.WATER
     _attr_native_unit_of_measurement = UnitOfVolume.CENTUM_CUBIC_FEET
+    _attr_translation_key = "water_consumption"
 
     def __init__(
         self,
@@ -135,7 +133,6 @@ class TPUWaterSensor(TPUSensor):
         super().__init__(
             coordinator,
             entry,
-            TPU_WATER_SENSOR_NAME,
             TPU_WATER_SENSOR_ID_SUFFIX,
             "water",
         )

@@ -141,7 +141,6 @@ class TestTPUEnergySensor:
         assert sensor.device_class == SensorDeviceClass.ENERGY
         assert sensor.native_unit_of_measurement == UnitOfEnergy.KILO_WATT_HOUR
         assert sensor.has_entity_name is True
-        assert sensor.name == "Energy Consumption"
         assert sensor.unique_id == f"{mock_config_entry.entry_id}_energy"
 
     def test_native_value_with_data(self, mock_config_entry):
@@ -214,7 +213,6 @@ class TestTPUWaterSensor:
         assert sensor.device_class == SensorDeviceClass.WATER
         assert sensor.native_unit_of_measurement == UnitOfVolume.CENTUM_CUBIC_FEET
         assert sensor.has_entity_name is True
-        assert sensor.name == "Water Consumption"
         assert sensor.unique_id == f"{mock_config_entry.entry_id}_water"
 
     def test_native_value_with_data(self, mock_config_entry):

@@ -27,5 +27,15 @@
     "abort": {
       "already_configured": "Account is already configured"
     }
+  },
+  "entity": {
+    "sensor": {
+      "energy_consumption": {
+        "name": "Energy Consumption"
+      },
+      "water_consumption": {
+        "name": "Water Consumption"
+      }
+    }
   }
 }
