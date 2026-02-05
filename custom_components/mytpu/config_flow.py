@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
-from homeassistant.config_entries import ConfigFlow
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.exceptions import HomeAssistantError
 
@@ -17,7 +18,14 @@ if TYPE_CHECKING:
 
 from .auth import AuthError
 from .client import MyTPUClient
-from .const import CONF_POWER_SERVICE, CONF_TOKEN_DATA, CONF_WATER_SERVICE, DOMAIN
+from .const import (
+    CONF_POWER_SERVICE,
+    CONF_TOKEN_DATA,
+    CONF_UPDATE_INTERVAL_HOURS,
+    CONF_WATER_SERVICE,
+    DEFAULT_UPDATE_INTERVAL_HOURS,
+    DOMAIN,
+)
 from .models import Service, ServiceType
 
 _LOGGER = logging.getLogger(__name__)
@@ -30,9 +38,17 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 )
 
 
+@dataclass
+class ValidationResult:
+    """Result of validating credentials and fetching services."""
+
+    title: str
+    services: list[Service]
+
+
 async def validate_and_fetch_services(
     hass: HomeAssistant, data: dict[str, Any]
-) -> tuple[dict[str, Any], list[Service]]:
+) -> ValidationResult:
     """Validate credentials and fetch available services."""
     client = MyTPUClient(
         data[CONF_USERNAME], data[CONF_PASSWORD], data.get(CONF_TOKEN_DATA)
@@ -45,7 +61,7 @@ async def validate_and_fetch_services(
                 "accountHolder", "Unknown"
             )
             services = await client.get_services()
-            return {"title": f"TPU - {account_holder}"}, services
+            return ValidationResult(title=f"TPU - {account_holder}", services=services)
     except AuthError as err:
         raise InvalidAuth from err
     except Exception as err:
@@ -57,6 +73,11 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Tacoma Public Utilities."""
 
     VERSION = 1
+
+    @staticmethod
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        """Get the options flow for this handler."""
+        return TPUOptionsFlow(config_entry)
 
     def __init__(self) -> None:
         """Initialize the config flow."""
@@ -71,12 +92,15 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             try:
-                info, services = await validate_and_fetch_services(
+                validation_result = await validate_and_fetch_services(
                     self.hass, user_input
                 )
+                await self.async_set_unique_id(validation_result.title)
+                self._abort_if_unique_id_configured()
+
                 self._data = user_input
-                self._data["title"] = info["title"]
-                self._services = services
+                self._data["title"] = validation_result.title
+                self._services = validation_result.services
                 return await self.async_step_meters()
             except CannotConnect:
                 errors["base"] = "cannot_connect"
@@ -123,6 +147,42 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=self._build_meters_schema(),
         )
 
+    async def async_step_reauth(self, entry_data: dict[str, Any]) -> ConfigFlowResult:
+        """Handle re-authentication."""
+        self._data = entry_data
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle re-authentication confirmation."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                new_data = {**self._data, **user_input}
+                await validate_and_fetch_services(self.hass, new_data)
+                entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+                if entry:
+                    self.hass.config_entries.async_update_entry(
+                        entry, data=new_data
+                    )
+                await self.hass.config_entries.async_reload(self.context["entry_id"])
+                return self.async_abort(reason="reauth_successful")
+
+            except CannotConnect:
+                errors["base"] = "cannot_connect"
+            except InvalidAuth:
+                errors["base"] = "invalid_auth"
+            except Exception:
+                _LOGGER.exception("Unexpected exception")
+                errors["base"] = "unknown"
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema({vol.Required(CONF_PASSWORD): str}),
+            errors=errors,
+        )
+
     def _build_meters_schema(self) -> vol.Schema:
         """Build the meters selection schema based on available services."""
         power_meters = [
@@ -163,6 +223,34 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
                 "totalizer": service.totalizer,
             }
         )
+
+
+class TPUOptionsFlow(OptionsFlow):
+    """Handle an options flow for Tacoma Public Utilities."""
+
+    def __init__(self, config_entry: ConfigEntry) -> None:
+        """Initialize the options flow."""
+        self._config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle the initial step of the options flow."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        options_schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_UPDATE_INTERVAL_HOURS,
+                    default=self._config_entry.options.get(
+                        CONF_UPDATE_INTERVAL_HOURS, DEFAULT_UPDATE_INTERVAL_HOURS
+                    ),
+                ): int,
+            }
+        )
+
+        return self.async_show_form(step_id="init", data_schema=options_schema)
 
 
 class CannotConnect(HomeAssistantError):

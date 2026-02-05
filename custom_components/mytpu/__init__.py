@@ -33,9 +33,10 @@ from .client import MyTPUClient
 from .const import (
     CONF_POWER_SERVICE,
     CONF_TOKEN_DATA,
+    CONF_UPDATE_INTERVAL_HOURS,
     CONF_WATER_SERVICE,
+    DEFAULT_UPDATE_INTERVAL_HOURS,
     DOMAIN,
-    UPDATE_INTERVAL_HOURS,
 )
 from .models import Service, ServiceType
 
@@ -77,7 +78,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    entry.async_on_unload(entry.add_update_listener(update_listener))
+
     return True
+
+
+async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle options update."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -101,11 +109,14 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         config_entry: ConfigEntry,
     ) -> None:
         """Initialize the coordinator."""
+        update_interval_hours = config_entry.options.get(
+            CONF_UPDATE_INTERVAL_HOURS, DEFAULT_UPDATE_INTERVAL_HOURS
+        )
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(hours=UPDATE_INTERVAL_HOURS),
+            update_interval=timedelta(hours=update_interval_hours),
         )
         self.client = client
         self.config_entry = config_entry
@@ -135,7 +146,7 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             # Fetch and import power usage statistics
             if self.power_service:
-                power_readings = await self.client.get_power_usage(self.power_service)
+                power_readings = await self.client.get_usage(self.power_service)
                 if power_readings:
                     await self._import_statistics(
                         self.power_service, power_readings, "energy"
@@ -150,7 +161,7 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             # Fetch and import water usage statistics
             if self.water_service:
-                water_readings = await self.client.get_water_usage(self.water_service)
+                water_readings = await self.client.get_usage(self.water_service)
                 if water_readings:
                     await self._import_statistics(
                         self.water_service, water_readings, "water"

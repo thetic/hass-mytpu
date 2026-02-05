@@ -13,6 +13,7 @@ from custom_components.mytpu.auth import AuthError
 from custom_components.mytpu.config_flow import (
     CannotConnect,
     InvalidAuth,
+    ValidationResult,
     validate_and_fetch_services,
 )
 from custom_components.mytpu.const import CONF_POWER_SERVICE, CONF_WATER_SERVICE, DOMAIN
@@ -39,11 +40,11 @@ async def test_validate_and_fetch_services_success(
         ]
         mock_client_class.return_value = mock_client
 
-        info, services = await validate_and_fetch_services(hass, mock_credentials)
+        validation_result = await validate_and_fetch_services(hass, mock_credentials)
 
-        assert info["title"] == "TPU - Test User"
-        assert len(services) == 1
-        assert services[0].meter_number == "MOCK_POWER_METER"
+        assert validation_result.title == "TPU - Test User"
+        assert len(validation_result.services) == 1
+        assert validation_result.services[0].meter_number == "MOCK_POWER_METER"
 
 
 @pytest.mark.asyncio
@@ -97,9 +98,9 @@ class TestTPUConfigFlow:
         with patch(
             "custom_components.mytpu.config_flow.validate_and_fetch_services"
         ) as mock_validate:
-            mock_validate.return_value = (
-                {"title": "TPU - Test User"},
-                [
+            mock_validate.return_value = ValidationResult(
+                title="TPU - Test User",
+                services=[
                     Service(
                         service_id="123",
                         service_number="SVC001",
@@ -197,9 +198,9 @@ class TestTPUConfigFlow:
         with patch(
             "custom_components.mytpu.config_flow.validate_and_fetch_services"
         ) as mock_validate:
-            mock_validate.return_value = (
-                {"title": "TPU - Test User"},
-                [mock_power_service, mock_water_service],
+            mock_validate.return_value = ValidationResult(
+                title="TPU - Test User",
+                services=[mock_power_service, mock_water_service],
             )
 
             result = await hass.config_entries.flow.async_init(
@@ -261,13 +262,12 @@ class TestTPUConfigFlow:
     async def test_meters_step_power_only(
         self, hass: HomeAssistant, mock_credentials, mock_power_service
     ):
-        """Test meters step selecting only power service."""
         with patch(
             "custom_components.mytpu.config_flow.validate_and_fetch_services"
         ) as mock_validate:
-            mock_validate.return_value = (
-                {"title": "TPU - Test User"},
-                [mock_power_service],
+            mock_validate.return_value = ValidationResult(
+                title="TPU - Test User",
+                services=[mock_power_service],
             )
 
             result = await hass.config_entries.flow.async_init(
@@ -312,9 +312,9 @@ class TestTPUConfigFlow:
         with patch(
             "custom_components.mytpu.config_flow.validate_and_fetch_services"
         ) as mock_validate:
-            mock_validate.return_value = (
-                {"title": "TPU - Test User"},
-                [mock_water_service],
+            mock_validate.return_value = ValidationResult(
+                title="TPU - Test User",
+                services=[mock_water_service],
             )
 
             result = await hass.config_entries.flow.async_init(
@@ -359,9 +359,9 @@ class TestTPUConfigFlow:
         with patch(
             "custom_components.mytpu.config_flow.validate_and_fetch_services"
         ) as mock_validate:
-            mock_validate.return_value = (
-                {"title": "TPU - Test User"},
-                [mock_power_service],
+            mock_validate.return_value = ValidationResult(
+                title="TPU - Test User",
+                services=[mock_power_service],
             )
 
             result = await hass.config_entries.flow.async_init(

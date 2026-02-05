@@ -52,7 +52,7 @@ class TPUSensor(CoordinatorEntity[TPUDataUpdateCoordinator], SensorEntity):
     """Base class for TPU sensors."""
 
     _attr_has_entity_name = True
-    _attr_name = None # Name is derived from translation key
+    _attr_name = None  # Name is derived from translation key
 
     def __init__(
         self,
@@ -136,4 +136,3 @@ class TPUWaterSensor(TPUSensor):
             TPU_WATER_SENSOR_ID_SUFFIX,
             "water",
         )
-

@@ -9,5 +9,7 @@ CONF_TOKEN_DATA = "token_data"
 TPU_POWER_SENSOR_ID_SUFFIX = "_energy"
 TPU_WATER_SENSOR_ID_SUFFIX = "_water"
 
-# Update interval in hours
-UPDATE_INTERVAL_HOURS = 1
+CONF_UPDATE_INTERVAL_HOURS = "update_interval_hours"
+
+# Default update interval in hours
+DEFAULT_UPDATE_INTERVAL_HOURS = 1

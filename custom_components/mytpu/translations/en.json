@@ -16,6 +16,13 @@
           "power_service": "Power Meter",
           "water_service": "Water Meter"
         }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate",
+        "description": "Your credentials for {username} have expired. Please enter your password to re-authenticate.",
+        "data": {
+          "password": "Password"
+        }
       }
     },
     "error": {
@@ -25,7 +32,8 @@
       "unknown": "Unexpected error"
     },
     "abort": {
-      "already_configured": "Account is already configured"
+      "already_configured": "Account is already configured",
+      "reauth_successful": "Re-authentication successful"
     }
   },
   "entity": {
@@ -35,6 +43,16 @@
       },
       "water_consumption": {
         "name": "Water Consumption"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Configure Options",
+        "data": {
+          "update_interval_hours": "Update Interval (hours)"
+        }
       }
     }
   }
