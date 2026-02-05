@@ -461,6 +461,63 @@ class TestMyTPUClient:
                     assert len(readings) == 2
 
     @pytest.mark.asyncio
+    async def test_get_usage_filters_monthly_placeholders(
+        self, mock_power_service, mock_account_info
+    ):
+        """Test that unfinalized monthly (M) entries are filtered out."""
+        response_with_monthly = {
+            "history": [
+                {
+                    "usageDate": "2026-01-01",
+                    "usageConsumptionValue": 25.5,
+                    "uom": "kWh",
+                    "usageCategory": "D",
+                },
+                {
+                    "usageDate": "2026-01-02",
+                    "usageConsumptionValue": 0.0,
+                    "uom": "kWh",
+                    "usageCategory": "M",
+                },
+                {
+                    "usageDate": "2026-01-03",
+                    "usageConsumptionValue": 0.0,
+                    "uom": "kWh",
+                    "usageCategory": "M",
+                },
+            ]
+        }
+
+        client = MyTPUClient("user", "pass")
+        client._account_context = mock_account_info["accountContext"]
+
+        with patch.object(
+            client._auth, "get_token", new=AsyncMock(return_value="test_token")
+        ):
+            from custom_components.mytpu.auth import TokenInfo
+
+            client._auth._token = TokenInfo(
+                access_token="test",
+                refresh_token="refresh",
+                expires_at=9999999999,
+                customer_id="CUST123",
+            )
+            async with client:
+                with aioresponses() as m:
+                    m.post(
+                        f"{BASE_URL}/rest/usage/month",
+                        status=200,
+                        payload=response_with_monthly,
+                    )
+
+                    readings = await client.get_usage(mock_power_service)
+
+                    # Only the D entry should be returned; M entries are filtered
+                    assert len(readings) == 1
+                    assert readings[0].date == datetime(2026, 1, 1, tzinfo=UTC)
+                    assert readings[0].consumption == 25.5
+
+    @pytest.mark.asyncio
     async def test_get_power_usage(
         self, mock_power_service, mock_account_info, mock_usage_response
     ):
