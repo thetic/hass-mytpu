@@ -181,7 +181,9 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise UpdateFailed(f"API request failed: {err}") from err
         except Exception as err:
             _LOGGER.exception("Unexpected error communicating with TPU")
-            raise UpdateFailed(f"Unexpected error communicating with TPU: {err}") from err
+            raise UpdateFailed(
+                f"Unexpected error communicating with TPU: {err}"
+            ) from err
 
     async def _save_token_data(self) -> None:
         """Save updated token data to config entry if changed."""

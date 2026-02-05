@@ -78,7 +78,9 @@ class MyTPUAuth:
         """Get current token data for storage."""
         return self._token.to_dict() if self._token else None
 
-    async def async_login(self, username: str, password: str, session: aiohttp.ClientSession) -> None:
+    async def async_login(
+        self, username: str, password: str, session: aiohttp.ClientSession
+    ) -> None:
         """Authenticate with username/password to get tokens."""
         # First get the Basic auth token from the JS bundle
         basic_token = await self._get_oauth_basic_token(session)
@@ -123,7 +125,9 @@ class MyTPUAuth:
             try:
                 await self._refresh_token(session)
             except AuthError as err:
-                raise AuthError("Token refresh failed. A full login is required.") from err
+                raise AuthError(
+                    "Token refresh failed. A full login is required."
+                ) from err
         assert self._token is not None
         return self._token.access_token
 

@@ -83,7 +83,9 @@ def mock_water_service():
 
 
 @pytest.fixture
-def mock_config_entry(mock_credentials, mock_token_data, mock_power_service, mock_water_service):
+def mock_config_entry(
+    mock_credentials, mock_token_data, mock_power_service, mock_water_service
+):
     """Return a mock config entry."""
     return MockConfigEntry(
         domain=DOMAIN,

@@ -60,7 +60,9 @@ async def validate_and_fetch_services(
             if not auth.get_token_data():
                 if client._session is None:
                     raise CannotConnect
-                await auth.async_login(data[CONF_USERNAME], data[CONF_PASSWORD], client._session)
+                await auth.async_login(
+                    data[CONF_USERNAME], data[CONF_PASSWORD], client._session
+                )
 
             account_info = await client.get_account_info()
             account_holder = account_info.get("accountContext", {}).get(
@@ -73,7 +75,7 @@ async def validate_and_fetch_services(
             return ValidationResult(
                 title=f"TPU - {account_holder}",
                 services=services,
-                token_data=token_data
+                token_data=token_data,
             )
     except AuthError as err:
         _LOGGER.debug("Authentication failed: %s", err)
@@ -198,11 +200,11 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
                 if self._data.get(CONF_WATER_SERVICE):
                     new_data[CONF_WATER_SERVICE] = self._data[CONF_WATER_SERVICE]
 
-                entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+                entry = self.hass.config_entries.async_get_entry(
+                    self.context["entry_id"]
+                )
                 if entry:
-                    self.hass.config_entries.async_update_entry(
-                        entry, data=new_data
-                    )
+                    self.hass.config_entries.async_update_entry(entry, data=new_data)
                 await self.hass.config_entries.async_reload(self.context["entry_id"])
                 return self.async_abort(reason="reauth_successful")
 
@@ -216,10 +218,9 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=vol.Schema({
-                vol.Required(CONF_USERNAME): str,
-                vol.Required(CONF_PASSWORD): str
-            }),
+            data_schema=vol.Schema(
+                {vol.Required(CONF_USERNAME): str, vol.Required(CONF_PASSWORD): str}
+            ),
             description_placeholders={"username": self._data[CONF_USERNAME]},
             errors=errors,
         )

@@ -293,7 +293,9 @@ class TestTPUDataUpdateCoordinator:
 
         coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
-        with pytest.raises(UpdateFailed, match="Unexpected error communicating with TPU: API Error"):
+        with pytest.raises(
+            UpdateFailed, match="Unexpected error communicating with TPU: API Error"
+        ):
             await coordinator._async_update_data()
 
     @pytest.mark.asyncio

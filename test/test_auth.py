@@ -380,7 +380,9 @@ class TestMyTPUAuth:
         """Test get_token when no token exists."""
         auth = MyTPUAuth()
         async with aiohttp.ClientSession() as session:
-            with pytest.raises(AuthError, match="No token available. A full login is required."):
+            with pytest.raises(
+                AuthError, match="No token available. A full login is required."
+            ):
                 await auth.get_token(session)
 
     @pytest.mark.asyncio

@@ -35,6 +35,7 @@ class MyTPUClient:
         """Enter async context."""
         self._session = aiohttp.ClientSession()
         return self
+
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         """Exit async context."""
         if self._session:
