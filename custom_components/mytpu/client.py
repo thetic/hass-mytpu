@@ -159,7 +159,10 @@ class MyTPUClient:
         history = result.get("history", [])
         readings = []
         for item in history:
-            if item.get("usageDate"):
+            # Skip "M" (monthly) entries: these are unfinalized placeholders
+            # with zero consumption that will be replaced by "D" (daily) entries
+            # once the meter reading is confirmed.
+            if item.get("usageDate") and item.get("usageCategory") != "M":
                 readings.append(UsageReading.from_api_response(item))
 
         return readings
