@@ -21,15 +21,13 @@ from homeassistant.components.recorder.statistics import (
     get_last_statistics,
 )
 from homeassistant.const import (
-    CONF_PASSWORD,
-    CONF_USERNAME,
     Platform,
     UnitOfEnergy,
     UnitOfVolume,
 )
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .auth import AuthError
+from .auth import AuthError, MyTPUAuth
 from .client import MyTPUClient, MyTPUError
 from .const import (
     CONF_POWER_SERVICE,
@@ -66,11 +64,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Tacoma Public Utilities from a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
-    client = MyTPUClient(
-        entry.data[CONF_USERNAME],
-        entry.data[CONF_PASSWORD],
-        entry.data.get(CONF_TOKEN_DATA),
-    )
+    auth = MyTPUAuth(entry.data.get(CONF_TOKEN_DATA))
+
+    client = MyTPUClient(auth)
 
     coordinator = TPUDataUpdateCoordinator(hass, client, entry)
     await coordinator.async_config_entry_first_refresh()

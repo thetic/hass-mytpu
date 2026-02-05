@@ -2,13 +2,17 @@
 
 import json
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.mytpu.auth import MyTPUAuth
+from custom_components.mytpu.client import MyTPUClient
 from custom_components.mytpu.const import (
     CONF_POWER_SERVICE,
+    CONF_TOKEN_DATA,
     CONF_WATER_SERVICE,
     DOMAIN,
 )
@@ -23,6 +27,18 @@ pytest_plugins = "pytest_homeassistant_custom_component"
 def auto_enable_custom_integrations(enable_custom_integrations):
     """Enable custom integrations for all tests."""
     yield
+
+
+@pytest.fixture
+def mock_mytpu_auth():
+    """Mock MyTPUAuth instance."""
+    return AsyncMock(spec=MyTPUAuth)
+
+
+@pytest.fixture
+def mock_mytpu_client(mock_mytpu_auth):
+    """Mock MyTPUClient instance."""
+    return AsyncMock(spec=MyTPUClient, _auth=mock_mytpu_auth)
 
 
 @pytest.fixture
@@ -67,13 +83,14 @@ def mock_water_service():
 
 
 @pytest.fixture
-def mock_config_entry(mock_credentials, mock_power_service, mock_water_service):
+def mock_config_entry(mock_credentials, mock_token_data, mock_power_service, mock_water_service):
     """Return a mock config entry."""
     return MockConfigEntry(
         domain=DOMAIN,
         version=1,
         data={
-            **mock_credentials,
+            CONF_USERNAME: mock_credentials[CONF_USERNAME],
+            CONF_TOKEN_DATA: mock_token_data,
             CONF_POWER_SERVICE: json.dumps(
                 {
                     "service_id": mock_power_service.service_id,
@@ -153,6 +170,19 @@ def mock_token_response():
             "customerId": "CUST123",
             "email": "test@example.com",
         },
+    }
+
+
+@pytest.fixture
+def mock_token_data():
+    """Return mock token data for storage."""
+    import time
+
+    return {
+        "access_token": "test_access_token_12345",
+        "refresh_token": "test_refresh_token_67890",
+        "expires_at": time.time() + 3600,
+        "customer_id": "CUST123",
     }
 
 

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from aioresponses import aioresponses
 
-from custom_components.mytpu.auth import BASE_URL
+from custom_components.mytpu.auth import BASE_URL, MyTPUAuth
 from custom_components.mytpu.client import MyTPUClient, MyTPUError
 from custom_components.mytpu.models import ServiceType
 
@@ -16,9 +16,9 @@ class TestMyTPUClient:
 
     def test_init(self):
         """Test client initialization."""
-        client = MyTPUClient("user@example.com", "password123")
-        assert client._auth._username == "user@example.com"
-        assert client._auth._password == "password123"
+        auth = MyTPUAuth()
+        client = MyTPUClient(auth)
+        assert client._auth is auth
         assert client._session is None
         assert client._account_context is None
         assert client._services is None
@@ -34,16 +34,17 @@ class TestMyTPUClient:
             "customer_id": "CUST123",
         }
 
-        client = MyTPUClient("user@example.com", "password123", token_data)
+        auth = MyTPUAuth(token_data)
+        client = MyTPUClient(auth)
 
-        assert client._auth._username == "user@example.com"
-        assert client._auth._password == "password123"
+        assert client._auth is auth
         assert client._auth._token is not None
         assert client._auth._token.access_token == "stored_access"
 
     def test_get_token_data_none(self):
         """Test get_token_data when no token exists."""
-        client = MyTPUClient("user", "pass")
+        auth = MyTPUAuth()
+        client = MyTPUClient(auth)
         assert client.get_token_data() is None
 
     def test_get_token_data_with_token(self):
@@ -52,7 +53,8 @@ class TestMyTPUClient:
 
         from custom_components.mytpu.auth import TokenInfo
 
-        client = MyTPUClient("user", "pass")
+        auth = MyTPUAuth()
+        client = MyTPUClient(auth)
         client._auth._token = TokenInfo(
             access_token="test_access",
             refresh_token="test_refresh",
@@ -70,7 +72,8 @@ class TestMyTPUClient:
     @pytest.mark.asyncio
     async def test_context_manager_enter(self):
         """Test async context manager enter."""
-        client = MyTPUClient("user", "pass")
+        auth = MyTPUAuth()
+        client = MyTPUClient(auth)
         async with client as c:
             assert c._session is not None
             assert isinstance(c, MyTPUClient)
@@ -78,7 +81,8 @@ class TestMyTPUClient:
     @pytest.mark.asyncio
     async def test_context_manager_exit(self):
         """Test async context manager exit."""
-        client = MyTPUClient("user", "pass")
+        auth = MyTPUAuth()
+        client = MyTPUClient(auth)
         async with client:
             assert client._session is not None
         assert client._session is None
@@ -86,7 +90,8 @@ class TestMyTPUClient:
     @pytest.mark.asyncio
     async def test_ensure_session_creates_session(self):
         """Test _ensure_session creates session if needed."""
-        client = MyTPUClient("user", "pass")
+        auth = MyTPUAuth()
+        client = MyTPUClient(auth)
         assert client._session is None
 
         session = await client._ensure_session()
@@ -100,7 +105,8 @@ class TestMyTPUClient:
         self, mock_account_info, mock_token_response
     ):
         """Test successful account info retrieval."""
-        client = MyTPUClient("user", "pass")
+        auth = MyTPUAuth()
+        client = MyTPUClient(auth)
 
         with patch.object(
             client._auth, "get_token", new=AsyncMock(return_value="test_token")
@@ -135,46 +141,21 @@ class TestMyTPUClient:
                     assert client._services[1].service_type == ServiceType.WATER
 
     @pytest.mark.asyncio
-    async def test_get_account_info_authenticates_if_needed(self, mock_account_info):
-        """Test that get_account_info authenticates if no customer_id."""
-        client = MyTPUClient("user", "pass")
+    async def test_get_account_info_requires_customer_id(self):
+        """Test that get_account_info raises error if no customer_id."""
+        auth = MyTPUAuth()
+        client = MyTPUClient(auth)
 
-        with patch.object(
-            client._auth, "get_token", new=AsyncMock(return_value="test_token")
-        ) as mock_get_token:
-            # Start with no _token (no customer_id)
-            from custom_components.mytpu.auth import TokenInfo
-
-            async with client:
-                with aioresponses() as m:
-                    m.post(
-                        f"{BASE_URL}/rest/account/customer/",
-                        status=200,
-                        payload=mock_account_info,
-                    )
-
-                    # Set token after get_token is called
-                    def set_token(*args, **kwargs):
-                        client._auth._token = TokenInfo(
-                            access_token="test",
-                            refresh_token="refresh",
-                            expires_at=9999999999,
-                            customer_id="CUST123",
-                        )
-                        return "test_token"
-
-                    mock_get_token.side_effect = set_token
-
-                    await client.get_account_info()
-
-                    # Should have called get_token to authenticate
-                    # Note: get_token is called twice - once to get customer_id, once in _request
-                    assert mock_get_token.call_count >= 1
+        async with client:
+            # Auth has no token, so customer_id is None
+            with pytest.raises(MyTPUError, match="Customer ID not available"):
+                await client.get_account_info()
 
     @pytest.mark.asyncio
     async def test_get_account_info_api_error(self):
         """Test handling of API error during account info fetch."""
-        client = MyTPUClient("user", "pass")
+        auth = MyTPUAuth()
+        client = MyTPUClient(auth)
 
         with patch.object(
             client._auth, "get_token", new=AsyncMock(return_value="test_token")
@@ -201,7 +182,8 @@ class TestMyTPUClient:
     @pytest.mark.asyncio
     async def test_get_services_cached(self, mock_account_info):
         """Test that get_services returns cached services."""
-        client = MyTPUClient("user", "pass")
+        auth = MyTPUAuth()
+        client = MyTPUClient(auth)
 
         with patch.object(
             client._auth, "get_token", new=AsyncMock(return_value="test_token")
@@ -234,7 +216,8 @@ class TestMyTPUClient:
     @pytest.mark.asyncio
     async def test_get_services_fetches_if_none(self, mock_account_info):
         """Test that get_services fetches account info if services not cached."""
-        client = MyTPUClient("user", "pass")
+        auth = MyTPUAuth()
+        client = MyTPUClient(auth)
 
         with patch.object(
             client._auth, "get_token", new=AsyncMock(return_value="test_token")
@@ -265,7 +248,8 @@ class TestMyTPUClient:
         self, mock_power_service, mock_account_info, mock_usage_response
     ):
         """Test successful usage data retrieval."""
-        client = MyTPUClient("user", "pass")
+        auth = MyTPUAuth()
+        client = MyTPUClient(auth)
         client._account_context = mock_account_info["accountContext"]
 
         with patch.object(
@@ -305,7 +289,8 @@ class TestMyTPUClient:
         self, mock_power_service, mock_account_info, mock_usage_response
     ):
         """Test usage retrieval with default date range."""
-        client = MyTPUClient("user", "pass")
+        auth = MyTPUAuth()
+        client = MyTPUClient(auth)
         client._account_context = mock_account_info["accountContext"]
 
         with patch.object(
@@ -336,7 +321,8 @@ class TestMyTPUClient:
         self, mock_power_service, mock_account_info, mock_usage_response
     ):
         """Test that get_usage fetches account info if not cached."""
-        client = MyTPUClient("user", "pass")
+        auth = MyTPUAuth()
+        client = MyTPUClient(auth)
 
         with patch.object(
             client._auth, "get_token", new=AsyncMock(return_value="test_token")
@@ -386,7 +372,8 @@ class TestMyTPUClient:
             totalizer=True,
         )
 
-        client = MyTPUClient("user", "pass")
+        auth = MyTPUAuth()
+        client = MyTPUClient(auth)
         client._account_context = mock_account_info["accountContext"]
 
         with patch.object(
@@ -433,7 +420,8 @@ class TestMyTPUClient:
             ]
         }
 
-        client = MyTPUClient("user", "pass")
+        auth = MyTPUAuth()
+        client = MyTPUClient(auth)
         client._account_context = mock_account_info["accountContext"]
 
         with patch.object(
@@ -488,7 +476,8 @@ class TestMyTPUClient:
             ]
         }
 
-        client = MyTPUClient("user", "pass")
+        auth = MyTPUAuth()
+        client = MyTPUClient(auth)
         client._account_context = mock_account_info["accountContext"]
 
         with patch.object(
@@ -520,7 +509,8 @@ class TestMyTPUClient:
     @pytest.mark.asyncio
     async def test_close(self):
         """Test close method closes session."""
-        client = MyTPUClient("user", "pass")
+        auth = MyTPUAuth()
+        client = MyTPUClient(auth)
         async with client:
             assert client._session is not None
 

@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigFlowResult
     from homeassistant.core import HomeAssistant
 
-from .auth import AuthError
+from .auth import AuthError, MyTPUAuth
 from .client import MyTPUClient
 from .const import (
     CONF_POWER_SERVICE,
@@ -44,25 +44,39 @@ class ValidationResult:
 
     title: str
     services: list[Service]
+    token_data: dict
 
 
 async def validate_and_fetch_services(
     hass: HomeAssistant, data: dict[str, Any]
 ) -> ValidationResult:
     """Validate credentials and fetch available services."""
-    client = MyTPUClient(
-        data[CONF_USERNAME], data[CONF_PASSWORD], data.get(CONF_TOKEN_DATA)
-    )
+    auth = MyTPUAuth(token_data=data.get(CONF_TOKEN_DATA))
+    client = MyTPUClient(auth)
 
     try:
         async with client:
+            # If token_data is not present, or refresh fails, perform full login
+            if not auth.get_token_data():
+                if client._session is None:
+                    raise CannotConnect
+                await auth.async_login(data[CONF_USERNAME], data[CONF_PASSWORD], client._session)
+
             account_info = await client.get_account_info()
             account_holder = account_info.get("accountContext", {}).get(
                 "accountHolder", "Unknown"
             )
             services = await client.get_services()
-            return ValidationResult(title=f"TPU - {account_holder}", services=services)
+            token_data = auth.get_token_data()
+            if token_data is None:
+                raise AuthError("Authentication failed to produce token data")
+            return ValidationResult(
+                title=f"TPU - {account_holder}",
+                services=services,
+                token_data=token_data
+            )
     except AuthError as err:
+        _LOGGER.debug("Authentication failed: %s", err)
         raise InvalidAuth from err
     except Exception as err:
         _LOGGER.exception("Unexpected error during validation")
@@ -98,8 +112,11 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(validation_result.title)
                 self._abort_if_unique_id_configured()
 
-                self._data = user_input
-                self._data["title"] = validation_result.title
+                self._data = {
+                    "title": validation_result.title,
+                    CONF_USERNAME: user_input[CONF_USERNAME],
+                    CONF_TOKEN_DATA: validation_result.token_data,
+                }
                 self._services = validation_result.services
                 return await self.async_step_meters()
             except CannotConnect:
@@ -159,8 +176,28 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
-                new_data = {**self._data, **user_input}
-                await validate_and_fetch_services(self.hass, new_data)
+                username = self._data[CONF_USERNAME]
+                password = user_input[CONF_PASSWORD]
+
+                auth = MyTPUAuth()
+                async with MyTPUClient(auth) as client:
+                    if client._session is None:
+                        raise CannotConnect
+                    await auth.async_login(username, password, client._session)
+                    # Get account info to verify authentication
+                    await client.get_account_info()
+
+                new_data = {
+                    CONF_USERNAME: username,
+                    CONF_TOKEN_DATA: auth.get_token_data(),
+                }
+
+                # Preserve existing selected services
+                if self._data.get(CONF_POWER_SERVICE):
+                    new_data[CONF_POWER_SERVICE] = self._data[CONF_POWER_SERVICE]
+                if self._data.get(CONF_WATER_SERVICE):
+                    new_data[CONF_WATER_SERVICE] = self._data[CONF_WATER_SERVICE]
+
                 entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
                 if entry:
                     self.hass.config_entries.async_update_entry(
@@ -179,7 +216,11 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=vol.Schema({vol.Required(CONF_PASSWORD): str}),
+            data_schema=vol.Schema({
+                vol.Required(CONF_USERNAME): str,
+                vol.Required(CONF_PASSWORD): str
+            }),
+            description_placeholders={"username": self._data[CONF_USERNAME]},
             errors=errors,
         )
 

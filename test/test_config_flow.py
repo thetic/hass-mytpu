@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant import config_entries
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.const import CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
@@ -16,28 +16,48 @@ from custom_components.mytpu.config_flow import (
     ValidationResult,
     validate_and_fetch_services,
 )
-from custom_components.mytpu.const import CONF_POWER_SERVICE, CONF_WATER_SERVICE, DOMAIN
+from custom_components.mytpu.const import (
+    CONF_POWER_SERVICE,
+    CONF_TOKEN_DATA,
+    CONF_WATER_SERVICE,
+    DOMAIN,
+)
 from custom_components.mytpu.models import Service, ServiceType
 
 
 @pytest.mark.asyncio
 async def test_validate_and_fetch_services_success(
-    hass: HomeAssistant, mock_credentials, mock_account_info
+    hass: HomeAssistant, mock_credentials, mock_account_info, mock_token_data
 ):
     """Test successful credential validation and service fetch."""
-    with patch("custom_components.mytpu.config_flow.MyTPUClient") as mock_client_class:
+    with (
+        patch("custom_components.mytpu.config_flow.MyTPUAuth") as mock_auth_class,
+        patch("custom_components.mytpu.config_flow.MyTPUClient") as mock_client_class,
+    ):
+        # Mock the auth instance - use MagicMock for synchronous methods
+        from unittest.mock import MagicMock
+
+        mock_auth = MagicMock()
+        mock_auth.async_login = AsyncMock()
+        mock_auth.get_token_data = MagicMock(return_value=mock_token_data)
+        mock_auth_class.return_value = mock_auth
+
+        # Mock the client instance
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value = mock_client
-        mock_client.get_account_info.return_value = mock_account_info
-        mock_client.get_services.return_value = [
-            Service(
-                service_id="123",
-                service_number="SVC001",
-                meter_number="MOCK_POWER_METER",
-                display_meter_number="MOCK_POWER_METER",
-                service_type=ServiceType.POWER,
-            ),
-        ]
+        mock_client._session = AsyncMock()
+        mock_client.get_account_info = AsyncMock(return_value=mock_account_info)
+        mock_client.get_services = AsyncMock(
+            return_value=[
+                Service(
+                    service_id="123",
+                    service_number="SVC001",
+                    meter_number="MOCK_POWER_METER",
+                    display_meter_number="MOCK_POWER_METER",
+                    service_type=ServiceType.POWER,
+                ),
+            ]
+        )
         mock_client_class.return_value = mock_client
 
         validation_result = await validate_and_fetch_services(hass, mock_credentials)
@@ -45,6 +65,7 @@ async def test_validate_and_fetch_services_success(
         assert validation_result.title == "TPU - Test User"
         assert len(validation_result.services) == 1
         assert validation_result.services[0].meter_number == "MOCK_POWER_METER"
+        assert validation_result.token_data == mock_token_data
 
 
 @pytest.mark.asyncio
@@ -52,10 +73,22 @@ async def test_validate_and_fetch_services_auth_error(
     hass: HomeAssistant, mock_credentials
 ):
     """Test validation with invalid credentials."""
-    with patch("custom_components.mytpu.config_flow.MyTPUClient") as mock_client_class:
+    with (
+        patch("custom_components.mytpu.config_flow.MyTPUAuth") as mock_auth_class,
+        patch("custom_components.mytpu.config_flow.MyTPUClient") as mock_client_class,
+    ):
+        from unittest.mock import MagicMock
+
+        # Mock the auth instance
+        mock_auth = MagicMock()
+        mock_auth.async_login = AsyncMock(side_effect=AuthError("Invalid credentials"))
+        mock_auth.get_token_data = MagicMock(return_value=None)
+        mock_auth_class.return_value = mock_auth
+
+        # Mock the client instance
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value = mock_client
-        mock_client.get_account_info.side_effect = AuthError("Invalid credentials")
+        mock_client._session = AsyncMock()
         mock_client_class.return_value = mock_client
 
         with pytest.raises(InvalidAuth):
@@ -92,7 +125,7 @@ class TestTPUConfigFlow:
 
     @pytest.mark.asyncio
     async def test_user_step_success(
-        self, hass: HomeAssistant, mock_credentials, mock_account_info
+        self, hass: HomeAssistant, mock_credentials, mock_account_info, mock_token_data
     ):
         """Test successful user step with valid credentials."""
         with patch(
@@ -109,6 +142,7 @@ class TestTPUConfigFlow:
                         service_type=ServiceType.POWER,
                     ),
                 ],
+                token_data=mock_token_data,
             )
 
             result = await hass.config_entries.flow.async_init(
@@ -191,6 +225,7 @@ class TestTPUConfigFlow:
         self,
         hass: HomeAssistant,
         mock_credentials,
+        mock_token_data,
         mock_power_service,
         mock_water_service,
     ):
@@ -201,6 +236,7 @@ class TestTPUConfigFlow:
             mock_validate.return_value = ValidationResult(
                 title="TPU - Test User",
                 services=[mock_power_service, mock_water_service],
+                token_data=mock_token_data,
             )
 
             result = await hass.config_entries.flow.async_init(
@@ -254,13 +290,13 @@ class TestTPUConfigFlow:
             assert result["type"] == FlowResultType.CREATE_ENTRY
             assert result["title"] == "TPU - Test User"
             assert CONF_USERNAME in result["data"]
-            assert CONF_PASSWORD in result["data"]
+            assert CONF_TOKEN_DATA in result["data"]
             assert CONF_POWER_SERVICE in result["data"]
             assert CONF_WATER_SERVICE in result["data"]
 
     @pytest.mark.asyncio
     async def test_meters_step_power_only(
-        self, hass: HomeAssistant, mock_credentials, mock_power_service
+        self, hass: HomeAssistant, mock_credentials, mock_token_data, mock_power_service
     ):
         with patch(
             "custom_components.mytpu.config_flow.validate_and_fetch_services"
@@ -268,6 +304,7 @@ class TestTPUConfigFlow:
             mock_validate.return_value = ValidationResult(
                 title="TPU - Test User",
                 services=[mock_power_service],
+                token_data=mock_token_data,
             )
 
             result = await hass.config_entries.flow.async_init(
@@ -306,7 +343,7 @@ class TestTPUConfigFlow:
 
     @pytest.mark.asyncio
     async def test_meters_step_water_only(
-        self, hass: HomeAssistant, mock_credentials, mock_water_service
+        self, hass: HomeAssistant, mock_credentials, mock_token_data, mock_water_service
     ):
         """Test meters step selecting only water service."""
         with patch(
@@ -315,6 +352,7 @@ class TestTPUConfigFlow:
             mock_validate.return_value = ValidationResult(
                 title="TPU - Test User",
                 services=[mock_water_service],
+                token_data=mock_token_data,
             )
 
             result = await hass.config_entries.flow.async_init(
@@ -353,7 +391,7 @@ class TestTPUConfigFlow:
 
     @pytest.mark.asyncio
     async def test_meters_step_no_selection(
-        self, hass: HomeAssistant, mock_credentials, mock_power_service
+        self, hass: HomeAssistant, mock_credentials, mock_token_data, mock_power_service
     ):
         """Test meters step with no meter selected."""
         with patch(
@@ -362,6 +400,7 @@ class TestTPUConfigFlow:
             mock_validate.return_value = ValidationResult(
                 title="TPU - Test User",
                 services=[mock_power_service],
+                token_data=mock_token_data,
             )
 
             result = await hass.config_entries.flow.async_init(

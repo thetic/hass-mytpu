@@ -52,16 +52,12 @@ class AuthError(Exception):
 class MyTPUAuth:
     """Handles OAuth2 authentication with MyTPU."""
 
-    def __init__(self, username: str, password: str, token_data: dict | None = None):
+    def __init__(self, token_data: dict | None = None):
         """Initialize auth handler.
 
         Args:
-            username: MyTPU account username
-            password: MyTPU account password
             token_data: Previously stored token data (optional)
         """
-        self._username = username
-        self._password = password
         self._token: TokenInfo | None = None
         self._oauth_basic_token: str | None = None
 
@@ -82,16 +78,52 @@ class MyTPUAuth:
         """Get current token data for storage."""
         return self._token.to_dict() if self._token else None
 
+    async def async_login(self, username: str, password: str, session: aiohttp.ClientSession) -> None:
+        """Authenticate with username/password to get tokens."""
+        # First get the Basic auth token from the JS bundle
+        basic_token = await self._get_oauth_basic_token(session)
+
+        url = f"{BASE_URL}/rest/oauth/token"
+        data = {
+            "grant_type": "password",
+            "username": username,
+            "password": password,
+        }
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": f"Basic {basic_token}",
+        }
+
+        async with session.post(url, data=data, headers=headers) as resp:
+            if resp.status != 200:
+                text = await resp.text()
+                raise AuthError(f"Authentication failed: {resp.status} - {text}")
+
+            result = await resp.json()
+
+            if "access_token" not in result:
+                raise AuthError(f"No access token in response: {result}")
+
+            expires_in = result.get("expires_in", 3600)
+            user_info = result.get("user", {})
+
+            self._token = TokenInfo(
+                access_token=result["access_token"],
+                refresh_token=result.get("refresh_token", ""),
+                expires_at=time.time() + expires_in,
+                customer_id=user_info.get("customerId", ""),
+            )
+
     async def get_token(self, session: aiohttp.ClientSession) -> str:
         """Get a valid access token, refreshing if necessary."""
         if self._token is None:
-            await self._authenticate(session)
+            raise AuthError("No token available. A full login is required.")
         elif self._token.is_expired:
             # Try to refresh the token first, fall back to re-authentication if it fails
             try:
                 await self._refresh_token(session)
-            except AuthError:
-                await self._authenticate(session)
+            except AuthError as err:
+                raise AuthError("Token refresh failed. A full login is required.") from err
         assert self._token is not None
         return self._token.access_token
 
@@ -183,42 +215,6 @@ class MyTPUAuth:
                 refresh_token=refresh_token,
                 expires_at=time.time() + expires_in,
                 customer_id=customer_id,
-            )
-
-    async def _authenticate(self, session: aiohttp.ClientSession) -> None:
-        """Authenticate with username/password to get tokens."""
-        # First get the Basic auth token from the JS bundle
-        basic_token = await self._get_oauth_basic_token(session)
-
-        url = f"{BASE_URL}/rest/oauth/token"
-        data = {
-            "grant_type": "password",
-            "username": self._username,
-            "password": self._password,
-        }
-        headers = {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Authorization": f"Basic {basic_token}",
-        }
-
-        async with session.post(url, data=data, headers=headers) as resp:
-            if resp.status != 200:
-                text = await resp.text()
-                raise AuthError(f"Authentication failed: {resp.status} - {text}")
-
-            result = await resp.json()
-
-            if "access_token" not in result:
-                raise AuthError(f"No access token in response: {result}")
-
-            expires_in = result.get("expires_in", 3600)
-            user_info = result.get("user", {})
-
-            self._token = TokenInfo(
-                access_token=result["access_token"],
-                refresh_token=result.get("refresh_token", ""),
-                expires_at=time.time() + expires_in,
-                customer_id=user_info.get("customerId", ""),
             )
 
     async def get_auth_header(self, session: aiohttp.ClientSession) -> dict:
