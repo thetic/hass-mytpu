@@ -232,6 +232,7 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
+            description_placeholders={"username": self._data.get(CONF_USERNAME, "")},
         )
 
     def _build_meters_schema(self) -> vol.Schema:
