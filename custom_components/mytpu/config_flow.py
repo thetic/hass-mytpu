@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.exceptions import HomeAssistantError
 
 if TYPE_CHECKING:
@@ -121,6 +122,8 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
                 }
                 self._services = validation_result.services
                 return await self.async_step_meters()
+            except AbortFlow:
+                return self.async_abort(reason="already_configured")
             except CannotConnect:
                 errors["base"] = "cannot_connect"
             except InvalidAuth:
@@ -208,6 +211,8 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
                 await self.hass.config_entries.async_reload(self.context["entry_id"])
                 return self.async_abort(reason="reauth_successful")
 
+            except AuthError:  # direct login failures
+                errors["base"] = "invalid_auth"
             except CannotConnect:
                 errors["base"] = "cannot_connect"
             except InvalidAuth:

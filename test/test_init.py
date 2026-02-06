@@ -16,15 +16,8 @@ from custom_components.mytpu import (
     async_setup_entry,
     async_unload_entry,
 )
-from custom_components.mytpu.const import (
-    CONF_POWER_SERVICE,
-    CONF_TOKEN_DATA,
-    DOMAIN,
-)
+from custom_components.mytpu.const import CONF_POWER_SERVICE, CONF_TOKEN_DATA, DOMAIN
 from custom_components.mytpu.models import Service, ServiceType, UsageReading
-
-# Import get_last_statistics and async_add_external_statistics for patching
-from custom_components.mytpu import get_last_statistics, async_add_external_statistics
 
 
 def test_service_from_config(mock_power_service):
