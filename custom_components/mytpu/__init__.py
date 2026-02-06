@@ -21,6 +21,8 @@ from homeassistant.components.recorder.statistics import (
     get_last_statistics,
 )
 from homeassistant.const import (
+    CONF_PASSWORD,
+    CONF_USERNAME,
     Platform,
     UnitOfEnergy,
     UnitOfVolume,
@@ -65,8 +67,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
     auth = MyTPUAuth(entry.data.get(CONF_TOKEN_DATA))
-
     client = MyTPUClient(auth)
+
+    # Migrate old config format (password) to new format (token_data)
+    if not entry.data.get(CONF_TOKEN_DATA) and CONF_PASSWORD in entry.data:
+        _LOGGER.info("Migrating old config format to token-based authentication")
+        try:
+            async with client:
+                if client._session is not None:
+                    await auth.async_login(
+                        entry.data[CONF_USERNAME],
+                        entry.data[CONF_PASSWORD],
+                        client._session,
+                    )
+                    token_data = auth.get_token_data()
+                    if token_data:
+                        # Save tokens and remove password
+                        new_data = {**entry.data, CONF_TOKEN_DATA: token_data}
+                        del new_data[CONF_PASSWORD]
+                        hass.config_entries.async_update_entry(entry, data=new_data)
+                        _LOGGER.info("Migration to token-based authentication successful")
+        except Exception as err:
+            _LOGGER.error("Failed to migrate config: %s", err)
+            # Trigger reauth flow
+            entry.async_start_reauth(hass)
+            return False
 
     coordinator = TPUDataUpdateCoordinator(hass, client, entry)
     await coordinator.async_config_entry_first_refresh()

@@ -219,9 +219,13 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="reauth_confirm",
             data_schema=vol.Schema(
-                {vol.Required(CONF_USERNAME): str, vol.Required(CONF_PASSWORD): str}
+                {
+                    vol.Required(
+                        CONF_USERNAME, default=self._data.get(CONF_USERNAME, "")
+                    ): str,
+                    vol.Required(CONF_PASSWORD): str,
+                }
             ),
-            description_placeholders={"username": self._data[CONF_USERNAME]},
             errors=errors,
         )
 
