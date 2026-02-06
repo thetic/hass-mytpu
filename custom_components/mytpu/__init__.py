@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -86,7 +86,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         new_data = {**entry.data, CONF_TOKEN_DATA: token_data}
                         del new_data[CONF_PASSWORD]
                         hass.config_entries.async_update_entry(entry, data=new_data)
-                        _LOGGER.info("Migration to token-based authentication successful")
+                        _LOGGER.info(
+                            "Migration to token-based authentication successful"
+                        )
         except Exception as err:
             _LOGGER.error("Failed to migrate config: %s", err)
             # Trigger reauth flow
@@ -168,7 +170,36 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             # Fetch and import power usage statistics
             if self.power_service:
-                power_readings = await self.client.get_usage(self.power_service)
+                power_statistic_id = (
+                    f"{DOMAIN}:{self.power_service.service_type.value}_{self.power_service.meter_number}".replace(
+                        "-", "_"
+                    ).lower()
+                    + "_energy"
+                )
+                last_power_stats = await self.hass.async_add_executor_job(
+                    get_last_statistics, self.hass, 1, power_statistic_id, True, {"sum"}
+                )
+                last_power_stat_time: float | None = None
+                if power_statistic_id in last_power_stats:
+                    last_power_stat_time = last_power_stats[power_statistic_id][0].get(
+                        "start"
+                    )
+
+                power_from_date: datetime | None = None
+                if last_power_stat_time:
+                    # Request data starting from the day after the last recorded statistic
+                    # Convert the Unix timestamp (float) back to a datetime object
+                    power_from_date = datetime.fromtimestamp(
+                        last_power_stat_time
+                    ) + timedelta(days=1)
+                    # Set time to midnight UTC for consistency with how usageDate is parsed in models.py
+                    power_from_date = power_from_date.replace(
+                        hour=0, minute=0, second=0, microsecond=0
+                    )
+
+                power_readings = await self.client.get_usage(
+                    self.power_service, from_date=power_from_date
+                )
                 if power_readings:
                     await self._import_statistics(
                         self.power_service, power_readings, "energy"
@@ -183,7 +214,36 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             # Fetch and import water usage statistics
             if self.water_service:
-                water_readings = await self.client.get_usage(self.water_service)
+                water_statistic_id = (
+                    f"{DOMAIN}:{self.water_service.service_type.value}_{self.water_service.meter_number}".replace(
+                        "-", "_"
+                    ).lower()
+                    + "_water"
+                )
+                last_water_stats = await self.hass.async_add_executor_job(
+                    get_last_statistics, self.hass, 1, water_statistic_id, True, {"sum"}
+                )
+                last_water_stat_time: float | None = None
+                if water_statistic_id in last_water_stats:
+                    last_water_stat_time = last_water_stats[water_statistic_id][0].get(
+                        "start"
+                    )
+
+                water_from_date: datetime | None = None
+                if last_water_stat_time:
+                    # Request data starting from the day after the last recorded statistic
+                    # Convert the Unix timestamp (float) back to a datetime object
+                    water_from_date = datetime.fromtimestamp(
+                        last_water_stat_time
+                    ) + timedelta(days=1)
+                    # Set time to midnight UTC for consistency with how usageDate is parsed in models.py
+                    water_from_date = water_from_date.replace(
+                        hour=0, minute=0, second=0, microsecond=0
+                    )
+
+                water_readings = await self.client.get_usage(
+                    self.water_service, from_date=water_from_date
+                )
                 if water_readings:
                     await self._import_statistics(
                         self.water_service, water_readings, "water"

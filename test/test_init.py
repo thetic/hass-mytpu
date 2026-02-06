@@ -23,6 +23,9 @@ from custom_components.mytpu.const import (
 )
 from custom_components.mytpu.models import Service, ServiceType, UsageReading
 
+# Import get_last_statistics and async_add_external_statistics for patching
+from custom_components.mytpu import get_last_statistics, async_add_external_statistics
+
 
 def test_service_from_config(mock_power_service):
     """Test reconstructing Service from JSON config."""
@@ -205,9 +208,12 @@ class TestTPUDataUpdateCoordinator:
 
         coordinator = TPUDataUpdateCoordinator(hass, mock_client, mock_config_entry)
 
-        with patch.object(
-            coordinator, "_import_statistics", new=AsyncMock()
-        ) as mock_import:
+        with (
+            patch("custom_components.mytpu.get_last_statistics", return_value={}),
+            patch.object(
+                coordinator, "_import_statistics", new=AsyncMock()
+            ) as mock_import,
+        ):
             data = await coordinator._async_update_data()
 
             assert "power" in data
