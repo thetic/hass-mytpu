@@ -109,9 +109,9 @@ async def test_async_setup_entry_migration_auth_failure(
     with (
         patch("custom_components.mytpu.MyTPUAuth", return_value=mock_auth),
         patch("custom_components.mytpu.MyTPUClient", return_value=mock_client),
+        pytest.raises(ConfigEntryAuthFailed, match="Authentication failed"),
     ):
-        with pytest.raises(ConfigEntryAuthFailed, match="Authentication failed"):
-            await async_setup_entry(hass, config_entry)
+        await async_setup_entry(hass, config_entry)
 
 
 @pytest.mark.asyncio
@@ -130,9 +130,9 @@ async def test_async_setup_entry_migration_generic_failure(
     with (
         patch("custom_components.mytpu.MyTPUAuth", return_value=mock_auth),
         patch("custom_components.mytpu.MyTPUClient", return_value=mock_client),
+        pytest.raises(ConfigEntryAuthFailed, match="Failed to migrate config"),
     ):
-        with pytest.raises(ConfigEntryAuthFailed, match="Failed to migrate config"):
-            await async_setup_entry(hass, config_entry)
+        await async_setup_entry(hass, config_entry)
 
 
 @pytest.mark.asyncio
