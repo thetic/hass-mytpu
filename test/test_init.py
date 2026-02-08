@@ -92,6 +92,88 @@ async def test_async_setup_entry(hass: HomeAssistant, mock_config_entry):
 
 
 @pytest.mark.asyncio
+async def test_async_setup_entry_migration_auth_failure(hass: HomeAssistant):
+    """Test setup with config migration failing due to auth error."""
+    from homeassistant.exceptions import ConfigEntryAuthFailed
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.mytpu.auth import AuthError
+
+    # Create entry with old format (password instead of token_data)
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        version=1,
+        data={
+            CONF_USERNAME: "user",
+            CONF_PASSWORD: "oldpass",
+        },
+        unique_id="test_migration_fail",
+        title="Test",
+    )
+    config_entry.add_to_hass(hass)
+
+    with (
+        patch("custom_components.mytpu.MyTPUAuth") as mock_auth_class,
+        patch("custom_components.mytpu.MyTPUClient") as mock_client_class,
+    ):
+        # Mock auth instance
+        mock_auth = MagicMock()
+        mock_auth.async_login = AsyncMock(side_effect=AuthError("Invalid credentials"))
+        mock_auth.get_token_data = MagicMock(return_value=None)
+        mock_auth_class.return_value = mock_auth
+
+        # Mock client instance
+        mock_client = MagicMock()
+        mock_client._session = MagicMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client_class.return_value = mock_client
+
+        with pytest.raises(ConfigEntryAuthFailed, match="Authentication failed"):
+            await async_setup_entry(hass, config_entry)
+
+
+@pytest.mark.asyncio
+async def test_async_setup_entry_migration_generic_failure(hass: HomeAssistant):
+    """Test setup with config migration failing due to generic error."""
+    from homeassistant.exceptions import ConfigEntryAuthFailed
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    # Create entry with old format (password instead of token_data)
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        version=1,
+        data={
+            CONF_USERNAME: "user",
+            CONF_PASSWORD: "oldpass",
+        },
+        unique_id="test_migration_generic_fail",
+        title="Test",
+    )
+    config_entry.add_to_hass(hass)
+
+    with (
+        patch("custom_components.mytpu.MyTPUAuth") as mock_auth_class,
+        patch("custom_components.mytpu.MyTPUClient") as mock_client_class,
+    ):
+        # Mock auth instance
+        mock_auth = MagicMock()
+        mock_auth.async_login = AsyncMock(side_effect=RuntimeError("Network error"))
+        mock_auth.get_token_data = MagicMock(return_value=None)
+        mock_auth_class.return_value = mock_auth
+
+        # Mock client instance
+        mock_client = MagicMock()
+        mock_client._session = MagicMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client_class.return_value = mock_client
+
+        with pytest.raises(ConfigEntryAuthFailed, match="Failed to migrate config"):
+            await async_setup_entry(hass, config_entry)
+
+
+@pytest.mark.asyncio
 async def test_async_unload_entry(hass: HomeAssistant, mock_config_entry):
     """Test unloading a config entry."""
     mock_coordinator = MagicMock()
@@ -295,6 +377,83 @@ class TestTPUDataUpdateCoordinator:
         with pytest.raises(
             UpdateFailed, match="Unexpected error communicating with TPU: API Error"
         ):
+            await coordinator._async_update_data()
+
+    @pytest.mark.asyncio
+    async def test_async_update_data_auth_error(
+        self, hass: HomeAssistant, mock_power_service
+    ):
+        """Test data update with authentication error."""
+        from homeassistant.exceptions import ConfigEntryAuthFailed
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+        from custom_components.mytpu.auth import AuthError
+
+        mock_client = AsyncMock()
+        mock_client.get_account_info = AsyncMock(side_effect=AuthError("Token expired"))
+
+        config_entry = MockConfigEntry(
+            domain=DOMAIN,
+            version=1,
+            data={
+                CONF_USERNAME: "user",
+                CONF_PASSWORD: "pass",
+                CONF_POWER_SERVICE: json.dumps(
+                    {
+                        "service_id": mock_power_service.service_id,
+                        "service_number": mock_power_service.service_number,
+                        "meter_number": mock_power_service.meter_number,
+                        "display_meter_number": mock_power_service.display_meter_number,
+                        "service_type": mock_power_service.service_type.value,
+                    }
+                ),
+            },
+            unique_id="test_auth_error",
+            title="Test",
+        )
+
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
+
+        with pytest.raises(ConfigEntryAuthFailed, match="Authentication failed"):
+            await coordinator._async_update_data()
+
+    @pytest.mark.asyncio
+    async def test_async_update_data_mytpu_error(
+        self, hass: HomeAssistant, mock_power_service
+    ):
+        """Test data update with MyTPU API error."""
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+        from custom_components.mytpu.client import MyTPUError
+
+        mock_client = AsyncMock()
+        mock_client.get_account_info = AsyncMock(
+            side_effect=MyTPUError("API request failed")
+        )
+
+        config_entry = MockConfigEntry(
+            domain=DOMAIN,
+            version=1,
+            data={
+                CONF_USERNAME: "user",
+                CONF_PASSWORD: "pass",
+                CONF_POWER_SERVICE: json.dumps(
+                    {
+                        "service_id": mock_power_service.service_id,
+                        "service_number": mock_power_service.service_number,
+                        "meter_number": mock_power_service.meter_number,
+                        "display_meter_number": mock_power_service.display_meter_number,
+                        "service_type": mock_power_service.service_type.value,
+                    }
+                ),
+            },
+            unique_id="test_mytpu_error",
+            title="Test",
+        )
+
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
+
+        with pytest.raises(UpdateFailed, match="API request failed"):
             await coordinator._async_update_data()
 
     @pytest.mark.asyncio
