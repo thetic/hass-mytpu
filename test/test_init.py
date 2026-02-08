@@ -310,6 +310,25 @@ class TestTPUDataUpdateCoordinator:
             await coordinator._async_update_data()
 
     @pytest.mark.asyncio
+    async def test_async_update_data_server_error(
+        self, hass: HomeAssistant, make_config_entry
+    ):
+        """Test data update with server error (should retry, not reauth)."""
+        from custom_components.mytpu.auth import ServerError
+
+        mock_client = AsyncMock()
+        mock_client.get_account_info = AsyncMock(
+            side_effect=ServerError("MyTPU server error: 500")
+        )
+        config_entry = make_config_entry(include_power=True)
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
+
+        # Server error should raise UpdateFailed (not ConfigEntryAuthFailed)
+        # This allows the coordinator to retry on the next update cycle
+        with pytest.raises(UpdateFailed, match="MyTPU server error"):
+            await coordinator._async_update_data()
+
+    @pytest.mark.asyncio
     async def test_save_token_data(self, hass: HomeAssistant, mock_config_entry):
         """Test that token data is saved to config entry."""
         import time

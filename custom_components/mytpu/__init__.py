@@ -30,7 +30,7 @@ from homeassistant.const import (
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .auth import AuthError, MyTPUAuth
+from .auth import AuthError, MyTPUAuth, ServerError
 from .client import MyTPUClient, MyTPUError
 from .const import (
     CONF_POWER_SERVICE,
@@ -268,6 +268,10 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except AuthError as err:
             # Trigger reauth flow so user is prompted to re-authenticate
             raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
+        except ServerError as err:
+            # Server error - temporary issue, will retry on next update
+            _LOGGER.warning("MyTPU server error (will retry): %s", err)
+            raise UpdateFailed(f"MyTPU server error: {err}") from err
         except MyTPUError as err:
             raise UpdateFailed(f"API request failed: {err}") from err
         except Exception as err:

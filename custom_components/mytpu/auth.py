@@ -47,7 +47,13 @@ class TokenInfo:
 
 
 class AuthError(Exception):
-    """Authentication error."""
+    """Authentication error - credentials invalid or token expired."""
+
+    pass
+
+
+class ServerError(Exception):
+    """Server error - temporary issue with MyTPU API."""
 
     pass
 
@@ -146,10 +152,14 @@ class MyTPUAuth:
                 self._token.expires_at,
                 time.time(),
             )
-            # Try to refresh the token first, fall back to re-authentication if it fails
+            # Try to refresh the token
             try:
                 await self._refresh_token(session)
+            except ServerError:
+                # Server error - let it propagate, coordinator will retry later
+                raise
             except AuthError as err:
+                # Auth error - token is invalid, need full re-authentication
                 _LOGGER.error("Token refresh failed: %s", err)
                 raise AuthError(
                     "Token refresh failed. A full login is required."
@@ -231,7 +241,15 @@ class MyTPUAuth:
                 _LOGGER.error(
                     "Token refresh failed with status %s: %s", resp.status, text
                 )
-                raise AuthError(f"Token refresh failed: {resp.status} - {text}")
+                # Distinguish between client errors (auth issues) and server errors
+                if resp.status >= 500:
+                    # Server error - temporary issue, should retry later
+                    raise ServerError(
+                        f"MyTPU server error during token refresh: {resp.status} - {text}"
+                    )
+                else:
+                    # Client error (401, 403, etc.) - invalid/expired token
+                    raise AuthError(f"Token refresh failed: {resp.status} - {text}")
 
             result = await resp.json()
 
