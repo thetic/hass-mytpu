@@ -349,7 +349,7 @@ class TestMyTPUAuth:
     @pytest.mark.asyncio
     @freeze_time("2026-01-17 12:00:00")
     async def test_refresh_token_api_error(self):
-        """Test refresh token handles API errors."""
+        """Test refresh token handles API errors (4xx)."""
         html = '<script src="main.abc123.js"></script>'
         js = 'Authorization:"Basic dGVzdDp0ZXN0"'
 
@@ -372,6 +372,37 @@ class TestMyTPUAuth:
                 )
 
                 with pytest.raises(AuthError, match="Token refresh failed: 400"):
+                    await auth._refresh_token(session)
+
+    @pytest.mark.asyncio
+    @freeze_time("2026-01-17 12:00:00")
+    async def test_refresh_token_server_error(self):
+        """Test refresh token handles server errors (5xx)."""
+        from custom_components.mytpu.auth import ServerError
+
+        html = '<script src="main.abc123.js"></script>'
+        js = 'Authorization:"Basic dGVzdDp0ZXN0"'
+
+        auth = MyTPUAuth()
+        auth._token = TokenInfo(
+            access_token="old_access",
+            refresh_token="old_refresh",
+            expires_at=time.time() - 100,
+            customer_id="CUST123",
+        )
+
+        async with aiohttp.ClientSession() as session:
+            with aioresponses() as m:
+                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
+                m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
+                m.post(
+                    f"{BASE_URL}/rest/oauth/token",
+                    status=500,
+                    body='{"error": "server_error"}',
+                )
+
+                # Server errors should raise ServerError, not AuthError
+                with pytest.raises(ServerError, match="MyTPU server error"):
                     await auth._refresh_token(session)
 
     @pytest.mark.asyncio
@@ -452,6 +483,39 @@ class TestMyTPUAuth:
                 )
 
                 with pytest.raises(AuthError, match="Token refresh failed."):
+                    await auth.get_token(session)
+
+    @pytest.mark.asyncio
+    @freeze_time("2026-01-17 12:00:00")
+    async def test_get_token_when_expired_refresh_server_error(self):
+        """Test get_token propagates ServerError when refresh encounters server error."""
+        from custom_components.mytpu.auth import ServerError
+
+        html = '<script src="main.abc123.js"></script>'
+        js = 'Authorization:"Basic dGVzdDp0ZXN0"'
+
+        auth = MyTPUAuth()
+        # Set an expired token
+        auth._token = TokenInfo(
+            access_token="old_token",
+            refresh_token="old_refresh",
+            expires_at=time.time() - 100,
+            customer_id="OLD123",
+        )
+
+        async with aiohttp.ClientSession() as session:
+            with aioresponses() as m:
+                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
+                m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
+                # Refresh encounters server error
+                m.post(
+                    f"{BASE_URL}/rest/oauth/token",
+                    status=500,
+                    body='{"error": "server_error"}',
+                )
+
+                # ServerError should propagate, not be wrapped in AuthError
+                with pytest.raises(ServerError, match="MyTPU server error"):
                     await auth.get_token(session)
 
     @pytest.mark.asyncio
