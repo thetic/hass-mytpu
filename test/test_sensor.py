@@ -24,7 +24,7 @@ from custom_components.mytpu.sensor import (
 async def test_async_setup_entry_both_services(hass: HomeAssistant, mock_config_entry):
     """Test setting up sensors for both power and water."""
     mock_coordinator = MagicMock()
-    hass.data[DOMAIN] = {mock_config_entry.entry_id: mock_coordinator}
+    hass.data[DOMAIN] = {mock_config_entry.entry_id: {"coordinator": mock_coordinator}}
 
     entities: list[Entity] = []
 
@@ -70,7 +70,7 @@ async def test_async_setup_entry_power_only(hass: HomeAssistant, mock_power_serv
     )
 
     mock_coordinator = MagicMock()
-    hass.data[DOMAIN] = {power_only_entry.entry_id: mock_coordinator}
+    hass.data[DOMAIN] = {power_only_entry.entry_id: {"coordinator": mock_coordinator}}
 
     entities: list[Entity] = []
 
@@ -115,7 +115,7 @@ async def test_async_setup_entry_water_only(hass: HomeAssistant, mock_water_serv
     )
 
     mock_coordinator = MagicMock()
-    hass.data[DOMAIN] = {water_only_entry.entry_id: mock_coordinator}
+    hass.data[DOMAIN] = {water_only_entry.entry_id: {"coordinator": mock_coordinator}}
 
     entities: list[Entity] = []
 

@@ -1,5 +1,6 @@
 """Tests for mytpu integration setup and coordinator."""
 
+import asyncio
 import json
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -140,7 +141,22 @@ async def test_async_unload_entry(hass: HomeAssistant, mock_config_entry):
     """Test unloading a config entry."""
     mock_coordinator = MagicMock()
     mock_coordinator.client.close = AsyncMock()
-    hass.data[DOMAIN] = {mock_config_entry.entry_id: mock_coordinator}
+
+    # Create a real asyncio task that can be cancelled and awaited
+    async def dummy_task():
+        try:
+            await asyncio.sleep(3600)  # Sleep for a long time
+        except asyncio.CancelledError:
+            raise  # Re-raise so the test can verify cancellation handling
+
+    mock_refresh_task = asyncio.create_task(dummy_task())
+
+    hass.data[DOMAIN] = {
+        mock_config_entry.entry_id: {
+            "coordinator": mock_coordinator,
+            "refresh_task": mock_refresh_task,
+        }
+    }
 
     with patch.object(
         hass.config_entries, "async_unload_platforms", return_value=True

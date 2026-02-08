@@ -33,7 +33,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up TPU sensors from a config entry."""
-    coordinator: TPUDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: TPUDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id][
+        "coordinator"
+    ]
 
     entities: list[SensorEntity] = []
 

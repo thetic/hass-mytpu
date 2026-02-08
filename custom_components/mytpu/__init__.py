@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 import logging
 from datetime import datetime, timedelta
@@ -63,6 +65,52 @@ def _service_from_config(config_json: str) -> Service:
     )
 
 
+async def _background_token_refresh(
+    hass: HomeAssistant, entry: ConfigEntry, client: MyTPUClient
+) -> None:
+    """Background task to refresh tokens every 45 minutes.
+
+    MyTPU's refresh tokens only last 2 hours total, so we need to refresh
+    more frequently than the data update interval to keep tokens fresh.
+    """
+    _LOGGER.info("Starting background token refresh task (every 45 minutes)")
+
+    while True:
+        try:
+            await asyncio.sleep(45 * 60)  # 45 minutes
+
+            _LOGGER.debug("Background token refresh: checking if refresh needed")
+
+            # Trigger a token check by calling get_account_info
+            # This will automatically refresh if the token is expired
+            await client.get_account_info()
+
+            # Save the refreshed token
+            token_data = client.get_token_data()
+            if token_data and token_data != entry.data.get(CONF_TOKEN_DATA):
+                _LOGGER.info("Background token refresh: saving updated tokens")
+                new_data = {**entry.data, CONF_TOKEN_DATA: token_data}
+                hass.config_entries.async_update_entry(entry, data=new_data)
+            else:
+                _LOGGER.debug("Background token refresh: tokens unchanged")
+
+        except asyncio.CancelledError:
+            _LOGGER.info("Background token refresh task cancelled")
+            raise
+        except AuthError as err:
+            _LOGGER.warning(
+                "Background token refresh failed (auth error): %s. "
+                "User will need to reauth.",
+                err,
+            )
+            # Don't raise - let the coordinator handle reauth on next update
+        except Exception as err:
+            _LOGGER.error(
+                "Background token refresh encountered error: %s. Will retry.", err
+            )
+            # Continue running despite errors
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Tacoma Public Utilities from a config entry."""
     hass.data.setdefault(DOMAIN, {})
@@ -102,11 +150,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = TPUDataUpdateCoordinator(hass, client, entry)
     await coordinator.async_config_entry_first_refresh()
 
-    hass.data[DOMAIN][entry.entry_id] = coordinator
+    # Start background token refresh task to keep tokens fresh
+    # MyTPU's refresh tokens only last 2 hours, so we refresh every 45 minutes
+    refresh_task = hass.async_create_task(
+        _background_token_refresh(hass, entry, client),
+        name=f"mytpu_token_refresh_{entry.entry_id}",
+    )
+
+    # Store coordinator and refresh task
+    hass.data[DOMAIN][entry.entry_id] = {
+        "coordinator": coordinator,
+        "refresh_task": refresh_task,
+    }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     entry.async_on_unload(entry.add_update_listener(update_listener))
+
+    # Ensure refresh task is cancelled when entry is unloaded
+    entry.async_on_unload(lambda: refresh_task.cancel())
 
     return True
 
@@ -119,7 +181,15 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        coordinator = hass.data[DOMAIN].pop(entry.entry_id)
+        entry_data = hass.data[DOMAIN].pop(entry.entry_id)
+        coordinator = entry_data["coordinator"]
+        refresh_task = entry_data["refresh_task"]
+
+        # Cancel the background refresh task
+        refresh_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await refresh_task
+
         await coordinator.client.close()
 
     return unload_ok
