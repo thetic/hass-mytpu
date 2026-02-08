@@ -27,6 +27,7 @@ from homeassistant.const import (
     UnitOfEnergy,
     UnitOfVolume,
 )
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .auth import AuthError, MyTPUAuth
@@ -89,11 +90,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         _LOGGER.info(
                             "Migration to token-based authentication successful"
                         )
+        except AuthError as err:
+            _LOGGER.error("Failed to migrate config - authentication failed: %s", err)
+            raise ConfigEntryAuthFailed(
+                f"Authentication failed during config migration: {err}"
+            ) from err
         except Exception as err:
             _LOGGER.error("Failed to migrate config: %s", err)
-            # Trigger reauth flow
-            entry.async_start_reauth(hass)
-            return False
+            raise ConfigEntryAuthFailed(f"Failed to migrate config: {err}") from err
 
     coordinator = TPUDataUpdateCoordinator(hass, client, entry)
     await coordinator.async_config_entry_first_refresh()
@@ -260,8 +264,7 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         except AuthError as err:
             # Trigger reauth flow so user is prompted to re-authenticate
-            self.config_entry.async_start_reauth(self.hass)
-            raise UpdateFailed(f"Authentication failed: {err}") from err
+            raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
         except MyTPUError as err:
             raise UpdateFailed(f"API request failed: {err}") from err
         except Exception as err:
