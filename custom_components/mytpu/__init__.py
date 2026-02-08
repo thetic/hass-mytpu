@@ -277,10 +277,14 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Save updated token data to config entry if changed."""
         token_data = self.client.get_token_data()
         if token_data and token_data != self.config_entry.data.get(CONF_TOKEN_DATA):
+            _LOGGER.debug("Token data changed, saving to config entry")
             new_data = {**self.config_entry.data, CONF_TOKEN_DATA: token_data}
             self.hass.config_entries.async_update_entry(
                 self.config_entry, data=new_data
             )
+            _LOGGER.info("Token data saved successfully")
+        else:
+            _LOGGER.debug("Token data unchanged, no save needed")
 
     async def _import_statistics(
         self, service: Service, readings: list, stat_type: str

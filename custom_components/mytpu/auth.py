@@ -1,5 +1,6 @@
 """OAuth2 authentication for MyTPU API."""
 
+import logging
 import re
 import time
 from dataclasses import dataclass
@@ -7,6 +8,8 @@ from dataclasses import dataclass
 import aiohttp
 
 BASE_URL = "https://myaccount.mytpu.org"
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -82,6 +85,7 @@ class MyTPUAuth:
         self, username: str, password: str, session: aiohttp.ClientSession
     ) -> None:
         """Authenticate with username/password to get tokens."""
+        _LOGGER.debug("Starting full login for user: %s", username)
         # First get the Basic auth token from the JS bundle
         basic_token = await self._get_oauth_basic_token(session)
 
@@ -99,6 +103,7 @@ class MyTPUAuth:
         async with session.post(url, data=data, headers=headers) as resp:
             if resp.status != 200:
                 text = await resp.text()
+                _LOGGER.error("Login failed with status %s: %s", resp.status, text)
                 raise AuthError(f"Authentication failed: {resp.status} - {text}")
 
             result = await resp.json()
@@ -108,23 +113,44 @@ class MyTPUAuth:
 
             expires_in = result.get("expires_in", 3600)
             user_info = result.get("user", {})
+            refresh_token = result.get("refresh_token", "")
+
+            if not refresh_token:
+                _LOGGER.warning(
+                    "No refresh_token provided in login response. "
+                    "Token refresh will not be possible."
+                )
 
             self._token = TokenInfo(
                 access_token=result["access_token"],
-                refresh_token=result.get("refresh_token", ""),
+                refresh_token=refresh_token,
                 expires_at=time.time() + expires_in,
                 customer_id=user_info.get("customerId", ""),
+            )
+            _LOGGER.info(
+                "Login successful. Token expires in %s seconds (at %s). "
+                "Has refresh token: %s",
+                expires_in,
+                self._token.expires_at,
+                bool(refresh_token),
             )
 
     async def get_token(self, session: aiohttp.ClientSession) -> str:
         """Get a valid access token, refreshing if necessary."""
         if self._token is None:
+            _LOGGER.error("No token available - full login required")
             raise AuthError("No token available. A full login is required.")
         elif self._token.is_expired:
+            _LOGGER.info(
+                "Token expired (expires_at: %s, current: %s) - attempting refresh",
+                self._token.expires_at,
+                time.time(),
+            )
             # Try to refresh the token first, fall back to re-authentication if it fails
             try:
                 await self._refresh_token(session)
             except AuthError as err:
+                _LOGGER.error("Token refresh failed: %s", err)
                 raise AuthError(
                     "Token refresh failed. A full login is required."
                 ) from err
@@ -182,8 +208,10 @@ class MyTPUAuth:
     async def _refresh_token(self, session: aiohttp.ClientSession) -> None:
         """Refresh the access token using the refresh token."""
         if not self._token or not self._token.refresh_token:
+            _LOGGER.error("No refresh token available for token refresh")
             raise AuthError("No refresh token available")
 
+        _LOGGER.debug("Attempting to refresh token using refresh_token")
         # Get the Basic auth token from the JS bundle
         basic_token = await self._get_oauth_basic_token(session)
 
@@ -200,11 +228,15 @@ class MyTPUAuth:
         async with session.post(url, data=data, headers=headers) as resp:
             if resp.status != 200:
                 text = await resp.text()
+                _LOGGER.error(
+                    "Token refresh failed with status %s: %s", resp.status, text
+                )
                 raise AuthError(f"Token refresh failed: {resp.status} - {text}")
 
             result = await resp.json()
 
             if "access_token" not in result:
+                _LOGGER.error("No access token in refresh response: %s", result)
                 raise AuthError(f"No access token in refresh response: {result}")
 
             expires_in = result.get("expires_in", 3600)
@@ -219,6 +251,10 @@ class MyTPUAuth:
                 refresh_token=refresh_token,
                 expires_at=time.time() + expires_in,
                 customer_id=customer_id,
+            )
+            _LOGGER.info(
+                "Token refresh successful. New token expires in %s seconds",
+                expires_in,
             )
 
     async def get_auth_header(self, session: aiohttp.ClientSession) -> dict:
