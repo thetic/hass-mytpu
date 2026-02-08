@@ -260,6 +260,9 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         "unit": latest.unit,
                     }
 
+            # Save token data again in case it was refreshed during usage fetching
+            await self._save_token_data()
+
             return data
 
         except AuthError as err:
