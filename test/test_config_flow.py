@@ -97,13 +97,22 @@ async def test_validate_and_fetch_services_auth_error(
 
 @pytest.mark.asyncio
 async def test_validate_and_fetch_services_connection_error(
-    hass: HomeAssistant, mock_credentials
+    hass: HomeAssistant, mock_credentials, mock_token_data
 ):
     """Test validation with connection error."""
-    with patch("custom_components.mytpu.config_flow.MyTPUClient") as mock_client_class:
+    with (
+        patch("custom_components.mytpu.config_flow.MyTPUAuth") as mock_auth_class,
+        patch("custom_components.mytpu.config_flow.MyTPUClient") as mock_client_class,
+    ):
+        mock_auth = MagicMock()
+        mock_auth.get_token_data = MagicMock(return_value=mock_token_data)
+        mock_auth_class.return_value = mock_auth
+
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value = mock_client
-        mock_client.get_account_info.side_effect = Exception("Connection failed")
+        mock_client.get_account_info = AsyncMock(
+            side_effect=Exception("Connection failed")
+        )
         mock_client_class.return_value = mock_client
 
         with pytest.raises(CannotConnect):

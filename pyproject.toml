@@ -46,6 +46,9 @@ asyncio_default_fixture_loop_scope = "function"
 addopts = [
     "--cov=custom_components/mytpu",
     "--cov-report=term-missing",
+    "-W error",
+    "-W ignore::ResourceWarning",
+    "-W ignore::pytest.PytestUnraisableExceptionWarning",
 ]
 
 [tool.coverage.run]
