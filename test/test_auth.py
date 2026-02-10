@@ -121,9 +121,7 @@ class TestMyTPUAuth:
 
     def test_init(self):
         """Test initialization."""
-        auth = MyTPUAuth("user@example.com", "password123")
-        assert auth._username == "user@example.com"
-        assert auth._password == "password123"
+        auth = MyTPUAuth()
         assert auth._token is None
         assert auth._oauth_basic_token is None
 
@@ -137,10 +135,8 @@ class TestMyTPUAuth:
             "customer_id": "CUST123",
         }
 
-        auth = MyTPUAuth("user@example.com", "password123", token_data)
+        auth = MyTPUAuth(token_data)
 
-        assert auth._username == "user@example.com"
-        assert auth._password == "password123"
         assert auth._token is not None
         assert auth._token.access_token == "stored_access"
         assert auth._token.refresh_token == "stored_refresh"
@@ -150,20 +146,20 @@ class TestMyTPUAuth:
         """Test initialization with invalid token data."""
         invalid_token_data = {"invalid": "data"}
 
-        auth = MyTPUAuth("user@example.com", "password123", invalid_token_data)
+        auth = MyTPUAuth(invalid_token_data)
 
         # Should ignore invalid token data
         assert auth._token is None
 
     def test_get_token_data_none(self):
         """Test get_token_data when no token exists."""
-        auth = MyTPUAuth("user", "pass")
+        auth = MyTPUAuth()
         assert auth.get_token_data() is None
 
     @freeze_time("2026-01-17 12:00:00")
     def test_get_token_data_with_token(self):
         """Test get_token_data returns token dict."""
-        auth = MyTPUAuth("user", "pass")
+        auth = MyTPUAuth()
         auth._token = TokenInfo(
             access_token="test_access",
             refresh_token="test_refresh",
@@ -180,7 +176,7 @@ class TestMyTPUAuth:
 
     def test_customer_id_none_when_no_token(self):
         """Test customer_id returns None when no token."""
-        auth = MyTPUAuth("user", "pass")
+        auth = MyTPUAuth()
         assert auth.customer_id is None
 
     @pytest.mark.asyncio
@@ -189,7 +185,7 @@ class TestMyTPUAuth:
         html = '<script src="main.abc123def456.js"></script>'
         js = 'headers: {"Authorization": "Basic dGVzdDp0ZXN0"}'
 
-        auth = MyTPUAuth("user", "pass")
+        auth = MyTPUAuth()
         async with aiohttp.ClientSession() as session:
             with aioresponses() as m:
                 m.get(f"{BASE_URL}/eportal/", status=200, body=html)
@@ -204,7 +200,7 @@ class TestMyTPUAuth:
         html = '<head><script src="main.fed789abc123.js"></script></head>'
         js = 'Authorization:"Basic YWx0ZXJuYXRpdmU="'
 
-        auth = MyTPUAuth("user", "pass")
+        auth = MyTPUAuth()
         async with aiohttp.ClientSession() as session:
             with aioresponses() as m:
                 m.get(f"{BASE_URL}/eportal/", status=200, body=html)
@@ -219,7 +215,7 @@ class TestMyTPUAuth:
         html = '<script src="main.abc123.js"></script>'
         js = 'Authorization:"Basic dGVzdA=="'
 
-        auth = MyTPUAuth("user", "pass")
+        auth = MyTPUAuth()
         async with aiohttp.ClientSession() as session:
             with aioresponses() as m:
                 m.get(f"{BASE_URL}/eportal/", status=200, body=html)
@@ -237,7 +233,7 @@ class TestMyTPUAuth:
         """Test error when main.js not found in HTML."""
         html = '<script src="other.js"></script>'
 
-        auth = MyTPUAuth("user", "pass")
+        auth = MyTPUAuth()
         async with aiohttp.ClientSession() as session:
             with aioresponses() as m:
                 m.get(f"{BASE_URL}/eportal/", status=200, body=html)
@@ -248,7 +244,7 @@ class TestMyTPUAuth:
     @pytest.mark.asyncio
     async def test_get_oauth_basic_token_login_page_error(self):
         """Test error when login page fetch fails."""
-        auth = MyTPUAuth("user", "pass")
+        auth = MyTPUAuth()
         async with aiohttp.ClientSession() as session:
             with aioresponses() as m:
                 m.get(f"{BASE_URL}/eportal/", status=500)
@@ -261,7 +257,7 @@ class TestMyTPUAuth:
         """Test error when JS bundle fetch fails."""
         html = '<script src="main.abc123.js"></script>'
 
-        auth = MyTPUAuth("user", "pass")
+        auth = MyTPUAuth()
         async with aiohttp.ClientSession() as session:
             with aioresponses() as m:
                 m.get(f"{BASE_URL}/eportal/", status=200, body=html)
@@ -276,7 +272,7 @@ class TestMyTPUAuth:
         html = '<script src="main.abc123.js"></script>'
         js = "var config = { headers: {} };"
 
-        auth = MyTPUAuth("user", "pass")
+        auth = MyTPUAuth()
         async with aiohttp.ClientSession() as session:
             with aioresponses() as m:
                 m.get(f"{BASE_URL}/eportal/", status=200, body=html)
@@ -301,7 +297,7 @@ class TestMyTPUAuth:
             "user": {"customerId": "CUST123"},
         }
 
-        auth = MyTPUAuth("user", "pass")
+        auth = MyTPUAuth()
         # Set an existing token with refresh_token
         auth._token = TokenInfo(
             access_token="old_access",
@@ -329,7 +325,7 @@ class TestMyTPUAuth:
     @pytest.mark.asyncio
     async def test_refresh_token_no_token(self):
         """Test refresh token fails when no token exists."""
-        auth = MyTPUAuth("user", "pass")
+        auth = MyTPUAuth()
 
         async with aiohttp.ClientSession() as session:
             with pytest.raises(AuthError, match="No refresh token available"):
@@ -338,7 +334,7 @@ class TestMyTPUAuth:
     @pytest.mark.asyncio
     async def test_refresh_token_no_refresh_token(self):
         """Test refresh token fails when refresh token is empty."""
-        auth = MyTPUAuth("user", "pass")
+        auth = MyTPUAuth()
         auth._token = TokenInfo(
             access_token="access",
             refresh_token="",
@@ -353,11 +349,11 @@ class TestMyTPUAuth:
     @pytest.mark.asyncio
     @freeze_time("2026-01-17 12:00:00")
     async def test_refresh_token_api_error(self):
-        """Test refresh token handles API errors."""
+        """Test refresh token handles API errors (4xx)."""
         html = '<script src="main.abc123.js"></script>'
         js = 'Authorization:"Basic dGVzdDp0ZXN0"'
 
-        auth = MyTPUAuth("user", "pass")
+        auth = MyTPUAuth()
         auth._token = TokenInfo(
             access_token="old_access",
             refresh_token="old_refresh",
@@ -379,91 +375,46 @@ class TestMyTPUAuth:
                     await auth._refresh_token(session)
 
     @pytest.mark.asyncio
-    async def test_authenticate_success(self, mock_token_response):
-        """Test successful authentication."""
+    @freeze_time("2026-01-17 12:00:00")
+    async def test_refresh_token_server_error(self):
+        """Test refresh token handles server errors (5xx)."""
+        from custom_components.mytpu.auth import ServerError
+
         html = '<script src="main.abc123.js"></script>'
         js = 'Authorization:"Basic dGVzdDp0ZXN0"'
 
-        auth = MyTPUAuth("user", "pass")
+        auth = MyTPUAuth()
+        auth._token = TokenInfo(
+            access_token="old_access",
+            refresh_token="old_refresh",
+            expires_at=time.time() - 100,
+            customer_id="CUST123",
+        )
+
         async with aiohttp.ClientSession() as session:
             with aioresponses() as m:
                 m.get(f"{BASE_URL}/eportal/", status=200, body=html)
                 m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
                 m.post(
                     f"{BASE_URL}/rest/oauth/token",
-                    status=200,
-                    payload=mock_token_response,
+                    status=500,
+                    body='{"error": "server_error"}',
                 )
 
-                await auth._authenticate(session)
-
-                assert auth._token is not None
-                assert auth._token.access_token == "test_access_token_12345"
-                assert auth._token.refresh_token == "test_refresh_token_67890"
-                assert auth._token.customer_id == "CUST123"
-                assert auth.customer_id == "CUST123"
-
-    @pytest.mark.asyncio
-    async def test_authenticate_invalid_credentials(self):
-        """Test authentication with invalid credentials."""
-        html = '<script src="main.abc123.js"></script>'
-        js = 'Authorization:"Basic dGVzdDp0ZXN0"'
-
-        auth = MyTPUAuth("user", "wrongpass")
-        async with aiohttp.ClientSession() as session:
-            with aioresponses() as m:
-                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
-                m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
-                m.post(
-                    f"{BASE_URL}/rest/oauth/token",
-                    status=401,
-                    body='{"error": "invalid_grant"}',
-                )
-
-                with pytest.raises(AuthError, match="Authentication failed: 401"):
-                    await auth._authenticate(session)
-
-    @pytest.mark.asyncio
-    async def test_authenticate_no_access_token_in_response(self):
-        """Test authentication when response missing access_token."""
-        html = '<script src="main.abc123.js"></script>'
-        js = 'Authorization:"Basic dGVzdDp0ZXN0"'
-        incomplete_response = {"refresh_token": "refresh"}
-
-        auth = MyTPUAuth("user", "pass")
-        async with aiohttp.ClientSession() as session:
-            with aioresponses() as m:
-                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
-                m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
-                m.post(
-                    f"{BASE_URL}/rest/oauth/token",
-                    status=200,
-                    payload=incomplete_response,
-                )
-
-                with pytest.raises(AuthError, match="No access token in response"):
-                    await auth._authenticate(session)
+                # Server errors should raise ServerError, not AuthError
+                with pytest.raises(ServerError, match="MyTPU server error"):
+                    await auth._refresh_token(session)
 
     @pytest.mark.asyncio
     @freeze_time("2026-01-17 12:00:00")
     async def test_get_token_when_none(self, mock_token_response):
         """Test get_token when no token exists."""
-        html = '<script src="main.abc123.js"></script>'
-        js = 'Authorization:"Basic dGVzdDp0ZXN0"'
-
-        auth = MyTPUAuth("user", "pass")
+        auth = MyTPUAuth()
         async with aiohttp.ClientSession() as session:
-            with aioresponses() as m:
-                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
-                m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
-                m.post(
-                    f"{BASE_URL}/rest/oauth/token",
-                    status=200,
-                    payload=mock_token_response,
-                )
-
-                token = await auth.get_token(session)
-                assert token == "test_access_token_12345"
+            with pytest.raises(
+                AuthError, match="No token available. A full login is required."
+            ):
+                await auth.get_token(session)
 
     @pytest.mark.asyncio
     @freeze_time("2026-01-17 12:00:00")
@@ -479,7 +430,7 @@ class TestMyTPUAuth:
             "user": {"customerId": "CUST123"},
         }
 
-        auth = MyTPUAuth("user", "pass")
+        auth = MyTPUAuth()
         # Set an expired token
         auth._token = TokenInfo(
             access_token="old_token",
@@ -506,14 +457,12 @@ class TestMyTPUAuth:
 
     @pytest.mark.asyncio
     @freeze_time("2026-01-17 12:00:00")
-    async def test_get_token_when_expired_refresh_fails_then_authenticates(
-        self, mock_token_response
-    ):
-        """Test get_token falls back to authentication when refresh fails."""
+    async def test_get_token_when_expired_refresh_fails(self):
+        """Test get_token raises AuthError when refresh fails."""
         html = '<script src="main.abc123.js"></script>'
         js = 'Authorization:"Basic dGVzdDp0ZXN0"'
 
-        auth = MyTPUAuth("user", "pass")
+        auth = MyTPUAuth()
         # Set an expired token
         auth._token = TokenInfo(
             access_token="old_token",
@@ -532,25 +481,48 @@ class TestMyTPUAuth:
                     status=400,
                     body='{"error": "invalid_grant"}',
                 )
-                # Need to set up mocks again for re-authentication
+
+                with pytest.raises(AuthError, match="Token refresh failed."):
+                    await auth.get_token(session)
+
+    @pytest.mark.asyncio
+    @freeze_time("2026-01-17 12:00:00")
+    async def test_get_token_when_expired_refresh_server_error(self):
+        """Test get_token propagates ServerError when refresh encounters server error."""
+        from custom_components.mytpu.auth import ServerError
+
+        html = '<script src="main.abc123.js"></script>'
+        js = 'Authorization:"Basic dGVzdDp0ZXN0"'
+
+        auth = MyTPUAuth()
+        # Set an expired token
+        auth._token = TokenInfo(
+            access_token="old_token",
+            refresh_token="old_refresh",
+            expires_at=time.time() - 100,
+            customer_id="OLD123",
+        )
+
+        async with aiohttp.ClientSession() as session:
+            with aioresponses() as m:
                 m.get(f"{BASE_URL}/eportal/", status=200, body=html)
                 m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
-                # Second call (full auth) succeeds
+                # Refresh encounters server error
                 m.post(
                     f"{BASE_URL}/rest/oauth/token",
-                    status=200,
-                    payload=mock_token_response,
+                    status=500,
+                    body='{"error": "server_error"}',
                 )
 
-                token = await auth.get_token(session)
-                assert token == "test_access_token_12345"
-                assert auth._token.customer_id == "CUST123"
+                # ServerError should propagate, not be wrapped in AuthError
+                with pytest.raises(ServerError, match="MyTPU server error"):
+                    await auth.get_token(session)
 
     @pytest.mark.asyncio
     @freeze_time("2026-01-17 12:00:00")
     async def test_get_token_when_valid(self):
         """Test get_token when token is still valid."""
-        auth = MyTPUAuth("user", "pass")
+        auth = MyTPUAuth()
         auth._token = TokenInfo(
             access_token="valid_token",
             refresh_token="valid_refresh",
@@ -568,16 +540,21 @@ class TestMyTPUAuth:
         html = '<script src="main.abc123.js"></script>'
         js = 'Authorization:"Basic dGVzdDp0ZXN0"'
 
-        auth = MyTPUAuth("user", "pass")
+        auth = MyTPUAuth()
         async with aiohttp.ClientSession() as session:
             with aioresponses() as m:
+                # Mocks for _get_oauth_basic_token during async_login
                 m.get(f"{BASE_URL}/eportal/", status=200, body=html)
                 m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
+                # Mocks for token exchange during async_login
                 m.post(
                     f"{BASE_URL}/rest/oauth/token",
                     status=200,
                     payload=mock_token_response,
                 )
+
+                # Perform a login to populate the token
+                await auth.async_login("testuser", "testpass", session)
 
                 header = await auth.get_auth_header(session)
                 assert header == {"Authorization": "Bearer test_access_token_12345"}

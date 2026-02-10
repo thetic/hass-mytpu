@@ -20,15 +20,13 @@ class MyTPUError(Exception):
 class MyTPUClient:
     """Client for interacting with the MyTPU API."""
 
-    def __init__(self, username: str, password: str, token_data: dict | None = None):
-        """Initialize the client with credentials.
+    def __init__(self, auth: MyTPUAuth):
+        """Initialize the client with an authenticated auth handler.
 
         Args:
-            username: MyTPU account username
-            password: MyTPU account password
-            token_data: Previously stored token data (optional)
+            auth: An initialized MyTPUAuth object.
         """
-        self._auth = MyTPUAuth(username, password, token_data)
+        self._auth = auth
         self._session: aiohttp.ClientSession | None = None
         self._account_context: dict | None = None
         self._services: list[Service] | None = None
@@ -76,12 +74,10 @@ class MyTPUClient:
 
     async def get_account_info(self) -> dict:
         """Fetch account information and available services."""
+        # customer_id is available from the auth handler after token acquisition
         customer_id = self._auth.customer_id
         if not customer_id:
-            # Need to authenticate first to get customer_id
-            session = await self._ensure_session()
-            await self._auth.get_token(session)
-            customer_id = self._auth.customer_id
+            raise MyTPUError("Customer ID not available from authentication.")
 
         data = {
             "customerId": customer_id,
@@ -166,24 +162,6 @@ class MyTPUClient:
                 readings.append(UsageReading.from_api_response(item))
 
         return readings
-
-    async def get_power_usage(
-        self,
-        service: Service,
-        from_date: datetime | None = None,
-        to_date: datetime | None = None,
-    ) -> list[UsageReading]:
-        """Convenience method to fetch power usage."""
-        return await self.get_usage(service, from_date, to_date)
-
-    async def get_water_usage(
-        self,
-        service: Service,
-        from_date: datetime | None = None,
-        to_date: datetime | None = None,
-    ) -> list[UsageReading]:
-        """Convenience method to fetch water usage."""
-        return await self.get_usage(service, from_date, to_date)
 
     def get_token_data(self) -> dict | None:
         """Get current token data for storage."""

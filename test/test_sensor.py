@@ -24,7 +24,7 @@ from custom_components.mytpu.sensor import (
 async def test_async_setup_entry_both_services(hass: HomeAssistant, mock_config_entry):
     """Test setting up sensors for both power and water."""
     mock_coordinator = MagicMock()
-    hass.data[DOMAIN] = {mock_config_entry.entry_id: mock_coordinator}
+    hass.data[DOMAIN] = {mock_config_entry.entry_id: {"coordinator": mock_coordinator}}
 
     entities: list[Entity] = []
 
@@ -70,7 +70,7 @@ async def test_async_setup_entry_power_only(hass: HomeAssistant, mock_power_serv
     )
 
     mock_coordinator = MagicMock()
-    hass.data[DOMAIN] = {power_only_entry.entry_id: mock_coordinator}
+    hass.data[DOMAIN] = {power_only_entry.entry_id: {"coordinator": mock_coordinator}}
 
     entities: list[Entity] = []
 
@@ -115,7 +115,7 @@ async def test_async_setup_entry_water_only(hass: HomeAssistant, mock_water_serv
     )
 
     mock_coordinator = MagicMock()
-    hass.data[DOMAIN] = {water_only_entry.entry_id: mock_coordinator}
+    hass.data[DOMAIN] = {water_only_entry.entry_id: {"coordinator": mock_coordinator}}
 
     entities: list[Entity] = []
 
@@ -141,7 +141,6 @@ class TestTPUEnergySensor:
         assert sensor.device_class == SensorDeviceClass.ENERGY
         assert sensor.native_unit_of_measurement == UnitOfEnergy.KILO_WATT_HOUR
         assert sensor.has_entity_name is True
-        assert sensor.name == "Energy Consumption"
         assert sensor.unique_id == f"{mock_config_entry.entry_id}_energy"
 
     def test_native_value_with_data(self, mock_config_entry):
@@ -214,7 +213,6 @@ class TestTPUWaterSensor:
         assert sensor.device_class == SensorDeviceClass.WATER
         assert sensor.native_unit_of_measurement == UnitOfVolume.CENTUM_CUBIC_FEET
         assert sensor.has_entity_name is True
-        assert sensor.name == "Water Consumption"
         assert sensor.unique_id == f"{mock_config_entry.entry_id}_water"
 
     def test_native_value_with_data(self, mock_config_entry):

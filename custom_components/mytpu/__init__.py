@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -27,15 +29,18 @@ from homeassistant.const import (
     UnitOfEnergy,
     UnitOfVolume,
 )
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .client import MyTPUClient
+from .auth import AuthError, MyTPUAuth, ServerError
+from .client import MyTPUClient, MyTPUError
 from .const import (
     CONF_POWER_SERVICE,
     CONF_TOKEN_DATA,
+    CONF_UPDATE_INTERVAL_HOURS,
     CONF_WATER_SERVICE,
+    DEFAULT_UPDATE_INTERVAL_HOURS,
     DOMAIN,
-    UPDATE_INTERVAL_HOURS,
 )
 from .models import Service, ServiceType
 
@@ -60,30 +65,131 @@ def _service_from_config(config_json: str) -> Service:
     )
 
 
+async def _background_token_refresh(
+    hass: HomeAssistant, entry: ConfigEntry, client: MyTPUClient
+) -> None:
+    """Background task to refresh tokens every 45 minutes.
+
+    MyTPU's refresh tokens only last 2 hours total, so we need to refresh
+    more frequently than the data update interval to keep tokens fresh.
+    """
+    _LOGGER.info("Starting background token refresh task (every 45 minutes)")
+
+    while True:
+        try:
+            await asyncio.sleep(45 * 60)  # 45 minutes
+
+            _LOGGER.debug("Background token refresh: checking if refresh needed")
+
+            # Trigger a token check by calling get_account_info
+            # This will automatically refresh if the token is expired
+            await client.get_account_info()
+
+            # Save the refreshed token
+            token_data = client.get_token_data()
+            if token_data and token_data != entry.data.get(CONF_TOKEN_DATA):
+                _LOGGER.info("Background token refresh: saving updated tokens")
+                new_data = {**entry.data, CONF_TOKEN_DATA: token_data}
+                hass.config_entries.async_update_entry(entry, data=new_data)
+            else:
+                _LOGGER.debug("Background token refresh: tokens unchanged")
+
+        except asyncio.CancelledError:
+            _LOGGER.info("Background token refresh task cancelled")
+            raise
+        except AuthError as err:
+            _LOGGER.warning(
+                "Background token refresh failed (auth error): %s. "
+                "User will need to reauth.",
+                err,
+            )
+            # Don't raise - let the coordinator handle reauth on next update
+        except Exception as err:
+            _LOGGER.error(
+                "Background token refresh encountered error: %s. Will retry.", err
+            )
+            # Continue running despite errors
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Tacoma Public Utilities from a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
-    client = MyTPUClient(
-        entry.data[CONF_USERNAME],
-        entry.data[CONF_PASSWORD],
-        entry.data.get(CONF_TOKEN_DATA),
-    )
+    auth = MyTPUAuth(entry.data.get(CONF_TOKEN_DATA))
+    client = MyTPUClient(auth)
+
+    # Migrate old config format (password) to new format (token_data)
+    if not entry.data.get(CONF_TOKEN_DATA) and CONF_PASSWORD in entry.data:
+        _LOGGER.info("Migrating old config format to token-based authentication")
+        try:
+            async with client:
+                if client._session is not None:
+                    await auth.async_login(
+                        entry.data[CONF_USERNAME],
+                        entry.data[CONF_PASSWORD],
+                        client._session,
+                    )
+                    token_data = auth.get_token_data()
+                    if token_data:
+                        # Save tokens and remove password
+                        new_data = {**entry.data, CONF_TOKEN_DATA: token_data}
+                        del new_data[CONF_PASSWORD]
+                        hass.config_entries.async_update_entry(entry, data=new_data)
+                        _LOGGER.info(
+                            "Migration to token-based authentication successful"
+                        )
+        except AuthError as err:
+            _LOGGER.error("Failed to migrate config - authentication failed: %s", err)
+            raise ConfigEntryAuthFailed(
+                f"Authentication failed during config migration: {err}"
+            ) from err
+        except Exception as err:
+            _LOGGER.error("Failed to migrate config: %s", err)
+            raise ConfigEntryAuthFailed(f"Failed to migrate config: {err}") from err
 
     coordinator = TPUDataUpdateCoordinator(hass, client, entry)
     await coordinator.async_config_entry_first_refresh()
 
-    hass.data[DOMAIN][entry.entry_id] = coordinator
+    # Start background token refresh task to keep tokens fresh
+    # MyTPU's refresh tokens only last 2 hours, so we refresh every 45 minutes
+    refresh_task = hass.async_create_task(
+        _background_token_refresh(hass, entry, client),
+        name=f"mytpu_token_refresh_{entry.entry_id}",
+    )
+
+    # Store coordinator and refresh task
+    hass.data[DOMAIN][entry.entry_id] = {
+        "coordinator": coordinator,
+        "refresh_task": refresh_task,
+    }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    entry.async_on_unload(entry.add_update_listener(update_listener))
+
+    # Ensure refresh task is cancelled when entry is unloaded
+    entry.async_on_unload(lambda: refresh_task.cancel())
+
     return True
+
+
+async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle options update."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        coordinator = hass.data[DOMAIN].pop(entry.entry_id)
+        entry_data = hass.data[DOMAIN].pop(entry.entry_id)
+        coordinator = entry_data["coordinator"]
+        refresh_task = entry_data["refresh_task"]
+
+        # Cancel the background refresh task
+        refresh_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await refresh_task
+
         await coordinator.client.close()
 
     return unload_ok
@@ -101,11 +207,14 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         config_entry: ConfigEntry,
     ) -> None:
         """Initialize the coordinator."""
+        update_interval_hours = config_entry.options.get(
+            CONF_UPDATE_INTERVAL_HOURS, DEFAULT_UPDATE_INTERVAL_HOURS
+        )
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(hours=UPDATE_INTERVAL_HOURS),
+            update_interval=timedelta(hours=update_interval_hours),
         )
         self.client = client
         self.config_entry = config_entry
@@ -135,7 +244,36 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             # Fetch and import power usage statistics
             if self.power_service:
-                power_readings = await self.client.get_power_usage(self.power_service)
+                power_statistic_id = (
+                    f"{DOMAIN}:{self.power_service.service_type.value}_{self.power_service.meter_number}".replace(
+                        "-", "_"
+                    ).lower()
+                    + "_energy"
+                )
+                last_power_stats = await self.hass.async_add_executor_job(
+                    get_last_statistics, self.hass, 1, power_statistic_id, True, {"sum"}
+                )
+                last_power_stat_time: float | None = None
+                if power_statistic_id in last_power_stats:
+                    last_power_stat_time = last_power_stats[power_statistic_id][0].get(
+                        "start"
+                    )
+
+                power_from_date: datetime | None = None
+                if last_power_stat_time:
+                    # Request data starting from the day after the last recorded statistic
+                    # Convert the Unix timestamp (float) back to a datetime object
+                    power_from_date = datetime.fromtimestamp(
+                        last_power_stat_time
+                    ) + timedelta(days=1)
+                    # Set time to midnight UTC for consistency with how usageDate is parsed in models.py
+                    power_from_date = power_from_date.replace(
+                        hour=0, minute=0, second=0, microsecond=0
+                    )
+
+                power_readings = await self.client.get_usage(
+                    self.power_service, from_date=power_from_date
+                )
                 if power_readings:
                     await self._import_statistics(
                         self.power_service, power_readings, "energy"
@@ -150,7 +288,36 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             # Fetch and import water usage statistics
             if self.water_service:
-                water_readings = await self.client.get_water_usage(self.water_service)
+                water_statistic_id = (
+                    f"{DOMAIN}:{self.water_service.service_type.value}_{self.water_service.meter_number}".replace(
+                        "-", "_"
+                    ).lower()
+                    + "_water"
+                )
+                last_water_stats = await self.hass.async_add_executor_job(
+                    get_last_statistics, self.hass, 1, water_statistic_id, True, {"sum"}
+                )
+                last_water_stat_time: float | None = None
+                if water_statistic_id in last_water_stats:
+                    last_water_stat_time = last_water_stats[water_statistic_id][0].get(
+                        "start"
+                    )
+
+                water_from_date: datetime | None = None
+                if last_water_stat_time:
+                    # Request data starting from the day after the last recorded statistic
+                    # Convert the Unix timestamp (float) back to a datetime object
+                    water_from_date = datetime.fromtimestamp(
+                        last_water_stat_time
+                    ) + timedelta(days=1)
+                    # Set time to midnight UTC for consistency with how usageDate is parsed in models.py
+                    water_from_date = water_from_date.replace(
+                        hour=0, minute=0, second=0, microsecond=0
+                    )
+
+                water_readings = await self.client.get_usage(
+                    self.water_service, from_date=water_from_date
+                )
                 if water_readings:
                     await self._import_statistics(
                         self.water_service, water_readings, "water"
@@ -163,19 +330,38 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         "unit": latest.unit,
                     }
 
+            # Save token data again in case it was refreshed during usage fetching
+            await self._save_token_data()
+
             return data
 
+        except AuthError as err:
+            # Trigger reauth flow so user is prompted to re-authenticate
+            raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
+        except ServerError as err:
+            # Server error - temporary issue, will retry on next update
+            _LOGGER.warning("MyTPU server error (will retry): %s", err)
+            raise UpdateFailed(f"MyTPU server error: {err}") from err
+        except MyTPUError as err:
+            raise UpdateFailed(f"API request failed: {err}") from err
         except Exception as err:
-            raise UpdateFailed(f"Error communicating with TPU: {err}") from err
+            _LOGGER.exception("Unexpected error communicating with TPU")
+            raise UpdateFailed(
+                f"Unexpected error communicating with TPU: {err}"
+            ) from err
 
     async def _save_token_data(self) -> None:
         """Save updated token data to config entry if changed."""
         token_data = self.client.get_token_data()
         if token_data and token_data != self.config_entry.data.get(CONF_TOKEN_DATA):
+            _LOGGER.debug("Token data changed, saving to config entry")
             new_data = {**self.config_entry.data, CONF_TOKEN_DATA: token_data}
             self.hass.config_entries.async_update_entry(
                 self.config_entry, data=new_data
             )
+            _LOGGER.info("Token data saved successfully")
+        else:
+            _LOGGER.debug("Token data unchanged, no save needed")
 
     async def _import_statistics(
         self, service: Service, readings: list, stat_type: str

@@ -9,6 +9,7 @@ from homeassistant.components.sensor import (
     SensorEntity,
 )
 from homeassistant.const import UnitOfEnergy, UnitOfVolume
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 if TYPE_CHECKING:
@@ -21,6 +22,8 @@ from .const import (
     CONF_POWER_SERVICE,
     CONF_WATER_SERVICE,
     DOMAIN,
+    TPU_POWER_SENSOR_ID_SUFFIX,
+    TPU_WATER_SENSOR_ID_SUFFIX,
 )
 
 
@@ -30,7 +33,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up TPU sensors from a config entry."""
-    coordinator: TPUDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: TPUDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id][
+        "coordinator"
+    ]
 
     entities: list[SensorEntity] = []
 
@@ -45,17 +50,60 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class TPUEnergySensor(CoordinatorEntity[TPUDataUpdateCoordinator], SensorEntity):
-    """Sensor for TPU power/energy consumption.
+class TPUSensor(CoordinatorEntity[TPUDataUpdateCoordinator], SensorEntity):
+    """Base class for TPU sensors."""
 
-    This sensor displays the latest daily consumption value.
-    Historical data and cumulative totals are managed via statistics.
-    """
+    _attr_has_entity_name = True
+    _attr_name = None  # Name is derived from translation key
+
+    def __init__(
+        self,
+        coordinator: TPUDataUpdateCoordinator,
+        entry: ConfigEntry,
+        unique_id_suffix: str,
+        service_type: str,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}{unique_id_suffix}"
+        self._entry = entry
+        self._service_type = service_type
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the latest daily consumption."""
+        if self.coordinator.data and self._service_type in self.coordinator.data:
+            return self.coordinator.data[self._service_type]["consumption"]
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional state attributes."""
+        attrs = {}
+        if self.coordinator.data and self._service_type in self.coordinator.data:
+            data = self.coordinator.data[self._service_type]
+            attrs["last_reading_date"] = data["date"].isoformat()
+            attrs["unit"] = data["unit"]
+        return attrs
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._entry.entry_id)},
+            name="Tacoma Public Utilities",
+            manufacturer="Tacoma Public Utilities",
+            model=self._entry.data.get("account_id"),
+            configuration_url="https://www.mytpu.org/",
+        )
+
+
+class TPUEnergySensor(TPUSensor):
+    """Sensor for TPU power/energy consumption."""
 
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
-    _attr_has_entity_name = True
-    _attr_name = "Energy Consumption"
+    _attr_translation_key = "energy_consumption"
 
     def __init__(
         self,
@@ -63,39 +111,20 @@ class TPUEnergySensor(CoordinatorEntity[TPUDataUpdateCoordinator], SensorEntity)
         entry: ConfigEntry,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator)
-        self._attr_unique_id = f"{entry.entry_id}_energy"
-        self._entry = entry
-
-    @property
-    def native_value(self) -> float | None:
-        """Return the latest daily energy consumption."""
-        if self.coordinator.data and "power" in self.coordinator.data:
-            return self.coordinator.data["power"]["consumption"]
-        return None
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return additional state attributes."""
-        attrs = {}
-        if self.coordinator.data and "power" in self.coordinator.data:
-            power_data = self.coordinator.data["power"]
-            attrs["last_reading_date"] = power_data["date"].isoformat()
-            attrs["unit"] = power_data["unit"]
-        return attrs
+        super().__init__(
+            coordinator,
+            entry,
+            TPU_POWER_SENSOR_ID_SUFFIX,
+            "power",
+        )
 
 
-class TPUWaterSensor(CoordinatorEntity[TPUDataUpdateCoordinator], SensorEntity):
-    """Sensor for TPU water consumption.
-
-    This sensor displays the latest daily consumption value.
-    Historical data and cumulative totals are managed via statistics.
-    """
+class TPUWaterSensor(TPUSensor):
+    """Sensor for TPU water consumption."""
 
     _attr_device_class = SensorDeviceClass.WATER
     _attr_native_unit_of_measurement = UnitOfVolume.CENTUM_CUBIC_FEET
-    _attr_has_entity_name = True
-    _attr_name = "Water Consumption"
+    _attr_translation_key = "water_consumption"
 
     def __init__(
         self,
@@ -103,23 +132,9 @@ class TPUWaterSensor(CoordinatorEntity[TPUDataUpdateCoordinator], SensorEntity):
         entry: ConfigEntry,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator)
-        self._attr_unique_id = f"{entry.entry_id}_water"
-        self._entry = entry
-
-    @property
-    def native_value(self) -> float | None:
-        """Return the latest daily water consumption."""
-        if self.coordinator.data and "water" in self.coordinator.data:
-            return self.coordinator.data["water"]["consumption"]
-        return None
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return additional state attributes."""
-        attrs = {}
-        if self.coordinator.data and "water" in self.coordinator.data:
-            water_data = self.coordinator.data["water"]
-            attrs["last_reading_date"] = water_data["date"].isoformat()
-            attrs["unit"] = water_data["unit"]
-        return attrs
+        super().__init__(
+            coordinator,
+            entry,
+            TPU_WATER_SENSOR_ID_SUFFIX,
+            "water",
+        )

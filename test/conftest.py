@@ -2,13 +2,17 @@
 
 import json
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.mytpu.auth import MyTPUAuth
+from custom_components.mytpu.client import MyTPUClient
 from custom_components.mytpu.const import (
     CONF_POWER_SERVICE,
+    CONF_TOKEN_DATA,
     CONF_WATER_SERVICE,
     DOMAIN,
 )
@@ -23,6 +27,18 @@ pytest_plugins = "pytest_homeassistant_custom_component"
 def auto_enable_custom_integrations(enable_custom_integrations):
     """Enable custom integrations for all tests."""
     yield
+
+
+@pytest.fixture
+def mock_mytpu_auth():
+    """Mock MyTPUAuth instance."""
+    return AsyncMock(spec=MyTPUAuth)
+
+
+@pytest.fixture
+def mock_mytpu_client(mock_mytpu_auth):
+    """Mock MyTPUClient instance."""
+    return AsyncMock(spec=MyTPUClient, _auth=mock_mytpu_auth)
 
 
 @pytest.fixture
@@ -67,13 +83,16 @@ def mock_water_service():
 
 
 @pytest.fixture
-def mock_config_entry(mock_credentials, mock_power_service, mock_water_service):
+def mock_config_entry(
+    mock_credentials, mock_token_data, mock_power_service, mock_water_service
+):
     """Return a mock config entry."""
     return MockConfigEntry(
         domain=DOMAIN,
         version=1,
         data={
-            **mock_credentials,
+            CONF_USERNAME: mock_credentials[CONF_USERNAME],
+            CONF_TOKEN_DATA: mock_token_data,
             CONF_POWER_SERVICE: json.dumps(
                 {
                     "service_id": mock_power_service.service_id,
@@ -157,6 +176,19 @@ def mock_token_response():
 
 
 @pytest.fixture
+def mock_token_data():
+    """Return mock token data for storage."""
+    import time
+
+    return {
+        "access_token": "test_access_token_12345",
+        "refresh_token": "test_refresh_token_67890",
+        "expires_at": time.time() + 3600,
+        "customer_id": "CUST123",
+    }
+
+
+@pytest.fixture
 def mock_account_info():
     """Return mock account info response."""
     return {
@@ -217,3 +249,80 @@ def mock_usage_response():
             },
         ],
     }
+
+
+@pytest.fixture
+def make_config_entry(mock_power_service):
+    """Factory fixture for creating config entries with various configurations."""
+
+    def _make_entry(include_power=False, include_water=False, include_password=False):
+        """Create a config entry with specified configuration.
+
+        Args:
+            include_power: Include power service config
+            include_water: Include water service config
+            include_password: Use old password format instead of token_data
+        """
+        data = {CONF_USERNAME: "user"}
+
+        if include_password:
+            data[CONF_PASSWORD] = "testpass"
+        else:
+            import time
+
+            data[CONF_TOKEN_DATA] = {
+                "access_token": "test_access",
+                "refresh_token": "test_refresh",
+                "expires_at": time.time() + 3600,
+                "customer_id": "CUST123",
+            }
+
+        if include_power:
+            data[CONF_POWER_SERVICE] = json.dumps(
+                {
+                    "service_id": mock_power_service.service_id,
+                    "service_number": mock_power_service.service_number,
+                    "meter_number": mock_power_service.meter_number,
+                    "display_meter_number": mock_power_service.display_meter_number,
+                    "service_type": mock_power_service.service_type.value,
+                }
+            )
+
+        if include_water:
+            data[CONF_WATER_SERVICE] = json.dumps(
+                {
+                    "service_id": "67890",
+                    "service_number": "SVC002",
+                    "meter_number": "MOCK_WATER_METER",
+                    "display_meter_number": "MOCK_WATER_METER",
+                    "service_type": "W",
+                }
+            )
+
+        return MockConfigEntry(
+            domain=DOMAIN,
+            version=1,
+            data=data,
+            unique_id=f"test_{include_power}_{include_water}_{include_password}",
+            title="Test",
+        )
+
+    return _make_entry
+
+
+@pytest.fixture
+def mock_migration_client_and_auth():
+    """Return pre-configured mocks for migration testing."""
+    from unittest.mock import MagicMock
+
+    # Mock auth instance
+    mock_auth = MagicMock()
+    mock_auth.get_token_data = MagicMock(return_value=None)
+
+    # Mock client instance with context manager support
+    mock_client = MagicMock()
+    mock_client._session = MagicMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+
+    return mock_auth, mock_client
