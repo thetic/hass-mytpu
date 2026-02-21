@@ -48,6 +48,8 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
+_SERVER_ERROR_REAUTH_THRESHOLD = 3
+
 
 def _service_from_config(config_json: str) -> Service:
     """Reconstruct a Service object from stored JSON config."""
@@ -236,6 +238,7 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.client = client
         self.config_entry = config_entry
+        self._consecutive_server_errors = 0
 
         # Parse service configs from JSON
         self.power_service: Service | None = None
@@ -351,14 +354,29 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Save token data again in case it was refreshed during usage fetching
             await self._save_token_data()
 
+            self._consecutive_server_errors = 0
             return data
 
         except AuthError as err:
             # Trigger reauth flow so user is prompted to re-authenticate
             raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
         except ServerError as err:
-            # Server error - temporary issue, will retry on next update
-            _LOGGER.warning("MyTPU server error (will retry): %s", err)
+            self._consecutive_server_errors += 1
+            if self._consecutive_server_errors >= _SERVER_ERROR_REAUTH_THRESHOLD:
+                _LOGGER.warning(
+                    "Server error on token refresh for %d consecutive updates "
+                    "(likely expired token) - requesting reauth",
+                    self._consecutive_server_errors,
+                )
+                raise ConfigEntryAuthFailed(
+                    "Token refresh consistently failing - please re-authenticate"
+                ) from err
+            _LOGGER.warning(
+                "MyTPU server error (will retry, %d/%d): %s",
+                self._consecutive_server_errors,
+                _SERVER_ERROR_REAUTH_THRESHOLD,
+                err,
+            )
             raise UpdateFailed(f"MyTPU server error: {err}") from err
         except MyTPUError as err:
             raise UpdateFailed(f"API request failed: {err}") from err

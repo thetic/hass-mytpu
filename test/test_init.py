@@ -370,7 +370,10 @@ class TestTPUDataUpdateCoordinator:
     async def test_async_update_data_server_error(
         self, hass: HomeAssistant, make_config_entry
     ):
-        """Test data update with server error (should retry, not reauth)."""
+        """Test data update with server error retries before triggering reauth."""
+        from homeassistant.exceptions import ConfigEntryAuthFailed
+
+        from custom_components.mytpu import _SERVER_ERROR_REAUTH_THRESHOLD
         from custom_components.mytpu.auth import ServerError
 
         mock_client = AsyncMock()
@@ -380,10 +383,41 @@ class TestTPUDataUpdateCoordinator:
         config_entry = make_config_entry(include_power=True)
         coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
-        # Server error should raise UpdateFailed (not ConfigEntryAuthFailed)
-        # This allows the coordinator to retry on the next update cycle
-        with pytest.raises(UpdateFailed, match="MyTPU server error"):
+        # First N-1 failures should raise UpdateFailed (retry)
+        for _ in range(_SERVER_ERROR_REAUTH_THRESHOLD - 1):
+            with pytest.raises(UpdateFailed, match="MyTPU server error"):
+                await coordinator._async_update_data()
+
+        # Nth consecutive failure should escalate to ConfigEntryAuthFailed
+        with pytest.raises(ConfigEntryAuthFailed):
             await coordinator._async_update_data()
+
+    @pytest.mark.asyncio
+    async def test_async_update_data_server_error_counter_resets(
+        self, hass: HomeAssistant, make_config_entry
+    ):
+        """Test that a successful update resets the server error counter."""
+        from custom_components.mytpu.auth import ServerError
+
+        mock_client = AsyncMock()
+        mock_client.get_token_data = MagicMock(return_value=None)
+        config_entry = make_config_entry(include_power=True)
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
+
+        # Fail once to increment the counter
+        mock_client.get_account_info = AsyncMock(
+            side_effect=ServerError("MyTPU server error: 500")
+        )
+        with pytest.raises(UpdateFailed):
+            await coordinator._async_update_data()
+        assert coordinator._consecutive_server_errors == 1
+
+        # Succeed — counter should reset
+        mock_client.get_account_info = AsyncMock(return_value={})
+        mock_client.get_usage = AsyncMock(return_value=[])
+        with patch("custom_components.mytpu.get_last_statistics", return_value={}):
+            await coordinator._async_update_data()
+        assert coordinator._consecutive_server_errors == 0
 
     @pytest.mark.asyncio
     async def test_save_token_data(self, hass: HomeAssistant, mock_config_entry):
