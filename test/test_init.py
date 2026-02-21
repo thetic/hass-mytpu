@@ -93,6 +93,47 @@ async def test_async_setup_entry(hass: HomeAssistant, mock_config_entry):
 
 
 @pytest.mark.asyncio
+async def test_async_setup_entry_server_error_triggers_reauth(
+    hass: HomeAssistant, mock_config_entry
+):
+    """Test that a server error during first refresh triggers reauth.
+
+    MyTPU returns 500 for expired refresh tokens instead of 401, so we must
+    detect ServerError in the cause chain and raise ConfigEntryAuthFailed.
+    """
+    from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+    from homeassistant.helpers.update_coordinator import UpdateFailed
+
+    from custom_components.mytpu.auth import ServerError
+
+    mock_config_entry.add_to_hass(hass)
+
+    # Build the exception chain: ConfigEntryNotReady <- UpdateFailed <- ServerError
+    server_err = ServerError("MyTPU server error during token refresh: 500 - ...")
+    update_failed = UpdateFailed(f"MyTPU server error: {server_err}")
+    update_failed.__cause__ = server_err
+    not_ready = ConfigEntryNotReady(str(update_failed))
+    not_ready.__cause__ = update_failed
+
+    with patch("custom_components.mytpu.MyTPUClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client_class.return_value = mock_client
+
+        with (
+            patch.object(
+                TPUDataUpdateCoordinator,
+                "async_config_entry_first_refresh",
+                side_effect=not_ready,
+            ),
+            pytest.raises(ConfigEntryAuthFailed),
+        ):
+            await async_setup_entry(hass, mock_config_entry)
+
+        # Client should be closed on failure
+        mock_client.close.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_async_setup_entry_migration_auth_failure(
     hass: HomeAssistant, make_config_entry, mock_migration_client_and_auth
 ):

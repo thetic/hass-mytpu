@@ -150,8 +150,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = TPUDataUpdateCoordinator(hass, client, entry)
     try:
         await coordinator.async_config_entry_first_refresh()
-    except Exception:
+    except Exception as err:
         await client.close()
+        # During setup, a server error on token refresh means the token is likely
+        # expired. MyTPU returns 500 for expired refresh tokens instead of 401,
+        # so we must detect this and raise ConfigEntryAuthFailed to trigger reauth
+        # rather than letting HA retry setup indefinitely via ConfigEntryNotReady.
+        cause: BaseException | None = err.__cause__
+        while cause is not None:
+            if isinstance(cause, ServerError):
+                _LOGGER.warning(
+                    "Server error during setup (likely expired token) - requesting reauth"
+                )
+                raise ConfigEntryAuthFailed(
+                    "Token refresh failed during setup - please re-authenticate"
+                ) from err
+            cause = cause.__cause__
         raise
 
     # Start background token refresh task to keep tokens fresh
