@@ -148,7 +148,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             raise ConfigEntryAuthFailed(f"Failed to migrate config: {err}") from err
 
     coordinator = TPUDataUpdateCoordinator(hass, client, entry)
-    await coordinator.async_config_entry_first_refresh()
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except Exception:
+        await client.close()
+        raise
 
     # Start background token refresh task to keep tokens fresh
     # MyTPU's refresh tokens only last 2 hours, so we refresh every 45 minutes
