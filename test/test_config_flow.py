@@ -556,7 +556,9 @@ class TestTPUConfigFlow:
             patch.object(
                 hass.config_entries, "async_update_entry"
             ) as mock_update_entry,
-            patch.object(hass.config_entries, "async_reload") as mock_reload,
+            patch.object(
+                hass.config_entries, "async_schedule_reload"
+            ) as mock_schedule_reload,
         ):
             mock_auth = AsyncMock()
             mock_auth.async_login = AsyncMock()
@@ -578,7 +580,7 @@ class TestTPUConfigFlow:
             assert result["type"] == FlowResultType.ABORT
             assert result["reason"] == "reauth_successful"
             mock_update_entry.assert_called_once()
-            mock_reload.assert_called_once_with(entry_id)
+            mock_schedule_reload.assert_called_once_with(entry_id)
 
             # Verify the updated entry data preserves existing services
             updated_data = mock_update_entry.call_args.kwargs["data"]
