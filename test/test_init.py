@@ -93,47 +93,6 @@ async def test_async_setup_entry(hass: HomeAssistant, mock_config_entry):
 
 
 @pytest.mark.asyncio
-async def test_async_setup_entry_server_error_triggers_reauth(
-    hass: HomeAssistant, mock_config_entry
-):
-    """Test that a server error during first refresh triggers reauth.
-
-    MyTPU returns 500 for expired refresh tokens instead of 401, so we must
-    detect ServerError in the cause chain and raise ConfigEntryAuthFailed.
-    """
-    from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
-    from homeassistant.helpers.update_coordinator import UpdateFailed
-
-    from custom_components.mytpu.auth import ServerError
-
-    mock_config_entry.add_to_hass(hass)
-
-    # Build the exception chain: ConfigEntryNotReady <- UpdateFailed <- ServerError
-    server_err = ServerError("MyTPU server error during token refresh: 500 - ...")
-    update_failed = UpdateFailed(f"MyTPU server error: {server_err}")
-    update_failed.__cause__ = server_err
-    not_ready = ConfigEntryNotReady(str(update_failed))
-    not_ready.__cause__ = update_failed
-
-    with patch("custom_components.mytpu.MyTPUClient") as mock_client_class:
-        mock_client = AsyncMock()
-        mock_client_class.return_value = mock_client
-
-        with (
-            patch.object(
-                TPUDataUpdateCoordinator,
-                "async_config_entry_first_refresh",
-                side_effect=not_ready,
-            ),
-            pytest.raises(ConfigEntryAuthFailed),
-        ):
-            await async_setup_entry(hass, mock_config_entry)
-
-        # Client should be closed on failure
-        mock_client.close.assert_called_once()
-
-
-@pytest.mark.asyncio
 async def test_async_setup_entry_migration_auth_failure(
     hass: HomeAssistant, make_config_entry, mock_migration_client_and_auth
 ):
@@ -367,57 +326,68 @@ class TestTPUDataUpdateCoordinator:
             await coordinator._async_update_data()
 
     @pytest.mark.asyncio
-    async def test_async_update_data_server_error(
+    async def test_async_update_data_server_error_no_credentials(
         self, hass: HomeAssistant, make_config_entry
     ):
-        """Test data update with server error retries before triggering reauth."""
+        """Test server error with no stored password triggers reauth immediately."""
         from homeassistant.exceptions import ConfigEntryAuthFailed
 
-        from custom_components.mytpu import _SERVER_ERROR_REAUTH_THRESHOLD
         from custom_components.mytpu.auth import ServerError
 
         mock_client = AsyncMock()
         mock_client.get_account_info = AsyncMock(
             side_effect=ServerError("MyTPU server error: 500")
         )
+        # Entry has no stored password
         config_entry = make_config_entry(include_power=True)
         coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
-        # First N-1 failures should raise UpdateFailed (retry)
-        for _ in range(_SERVER_ERROR_REAUTH_THRESHOLD - 1):
-            with pytest.raises(UpdateFailed, match="MyTPU server error"):
-                await coordinator._async_update_data()
-
-        # Nth consecutive failure should escalate to ConfigEntryAuthFailed
         with pytest.raises(ConfigEntryAuthFailed):
             await coordinator._async_update_data()
 
     @pytest.mark.asyncio
-    async def test_async_update_data_server_error_counter_resets(
+    async def test_async_update_data_server_error_relogin_success(
         self, hass: HomeAssistant, make_config_entry
     ):
-        """Test that a successful update resets the server error counter."""
+        """Test server error triggers re-login, then retries data fetch successfully."""
         from custom_components.mytpu.auth import ServerError
 
         mock_client = AsyncMock()
+        # First call raises ServerError, second (after re-login) succeeds
+        mock_client.get_account_info = AsyncMock(
+            side_effect=[ServerError("500"), {}]
+        )
+        mock_client.get_usage = AsyncMock(return_value=[])
         mock_client.get_token_data = MagicMock(return_value=None)
-        config_entry = make_config_entry(include_power=True)
+        mock_client.async_login = AsyncMock()
+        config_entry = make_config_entry(include_power=True, include_stored_password=True)
         coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
-        # Fail once to increment the counter
+        with patch("custom_components.mytpu.get_last_statistics", return_value={}):
+            data = await coordinator._async_update_data()
+
+        mock_client.async_login.assert_called_once_with("user", "testpass")
+        assert data == {}
+
+    @pytest.mark.asyncio
+    async def test_async_update_data_server_error_relogin_fails(
+        self, hass: HomeAssistant, make_config_entry
+    ):
+        """Test server error where re-login fails triggers reauth."""
+        from homeassistant.exceptions import ConfigEntryAuthFailed
+
+        from custom_components.mytpu.auth import AuthError, ServerError
+
+        mock_client = AsyncMock()
         mock_client.get_account_info = AsyncMock(
             side_effect=ServerError("MyTPU server error: 500")
         )
-        with pytest.raises(UpdateFailed):
-            await coordinator._async_update_data()
-        assert coordinator._consecutive_server_errors == 1
+        mock_client.async_login = AsyncMock(side_effect=AuthError("Bad password"))
+        config_entry = make_config_entry(include_power=True, include_stored_password=True)
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
-        # Succeed — counter should reset
-        mock_client.get_account_info = AsyncMock(return_value={})
-        mock_client.get_usage = AsyncMock(return_value=[])
-        with patch("custom_components.mytpu.get_last_statistics", return_value={}):
+        with pytest.raises(ConfigEntryAuthFailed):
             await coordinator._async_update_data()
-        assert coordinator._consecutive_server_errors == 0
 
     @pytest.mark.asyncio
     async def test_save_token_data(self, hass: HomeAssistant, mock_config_entry):

@@ -118,6 +118,7 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._data = {
                     "title": validation_result.title,
                     CONF_USERNAME: user_input[CONF_USERNAME],
+                    CONF_PASSWORD: user_input[CONF_PASSWORD],
                     CONF_TOKEN_DATA: validation_result.token_data,
                 }
                 self._services = validation_result.services
@@ -194,6 +195,7 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
 
                 new_data = {
                     **reauth_entry.data,
+                    CONF_PASSWORD: password,
                     CONF_TOKEN_DATA: auth.get_token_data(),
                 }
 

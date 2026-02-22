@@ -48,8 +48,6 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
-_SERVER_ERROR_REAUTH_THRESHOLD = 3
-
 
 def _service_from_config(config_json: str) -> Service:
     """Reconstruct a Service object from stored JSON config."""
@@ -117,9 +115,31 @@ async def _background_token_refresh(
             )
             # Don't raise - let the coordinator handle reauth on next update
         except ServerError as err:
-            _LOGGER.warning(
-                "Background token refresh failed (server error): %s. Will retry.", err
-            )
+            username = entry.data.get(CONF_USERNAME)
+            password = entry.data.get(CONF_PASSWORD)
+            if username and password:
+                _LOGGER.info(
+                    "Background token refresh failed (server error), attempting re-login"
+                )
+                try:
+                    await client.async_login(username, password)
+                    token_data = client.get_token_data()
+                    if token_data and token_data != entry.data.get(CONF_TOKEN_DATA):
+                        _LOGGER.info("Background re-login: saving updated tokens")
+                        new_data = {**entry.data, CONF_TOKEN_DATA: token_data}
+                        hass.config_entries.async_update_entry(entry, data=new_data)
+                    else:
+                        _LOGGER.debug("Background re-login: token data unchanged")
+                except AuthError as login_err:
+                    _LOGGER.warning(
+                        "Background re-login failed: %s. Will retry.", login_err
+                    )
+            else:
+                _LOGGER.warning(
+                    "Background token refresh failed (server error) and no stored "
+                    "credentials: %s. Will retry.",
+                    err,
+                )
         except Exception as err:
             _LOGGER.error(
                 "Background token refresh encountered unexpected error: %s. Will retry.",
@@ -148,9 +168,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     )
                     token_data = auth.get_token_data()
                     if token_data:
-                        # Save tokens and remove password
+                        # Save tokens alongside existing password
                         new_data = {**entry.data, CONF_TOKEN_DATA: token_data}
-                        del new_data[CONF_PASSWORD]
                         hass.config_entries.async_update_entry(entry, data=new_data)
                         _LOGGER.info(
                             "Migration to token-based authentication successful"
@@ -169,20 +188,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await coordinator.async_config_entry_first_refresh()
     except Exception as err:
         await client.close()
-        # During setup, a server error on token refresh means the token is likely
-        # expired. MyTPU returns 500 for expired refresh tokens instead of 401,
-        # so we must detect this and raise ConfigEntryAuthFailed to trigger reauth
-        # rather than letting HA retry setup indefinitely via ConfigEntryNotReady.
-        cause: BaseException | None = err.__cause__
-        while cause is not None:
-            if isinstance(cause, ServerError):
-                _LOGGER.warning(
-                    "Server error during setup (likely expired token) - requesting reauth"
-                )
-                raise ConfigEntryAuthFailed(
-                    "Token refresh failed during setup - please re-authenticate"
-                ) from err
-            cause = cause.__cause__
         raise
 
     # Start background token refresh task to keep tokens fresh
@@ -253,7 +258,6 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.client = client
         self.config_entry = config_entry
-        self._consecutive_server_errors = 0
 
         # Parse service configs from JSON
         self.power_service: Service | None = None
@@ -268,7 +272,16 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Fetch data from TPU and update statistics."""
+        """Fetch data, re-logging in automatically if token refresh fails."""
+        try:
+            return await self._do_fetch()
+        except ServerError as err:
+            await self._relogin_or_raise(err)
+            # Re-login succeeded — retry once with the fresh token
+            return await self._do_fetch()
+
+    async def _do_fetch(self) -> dict[str, Any]:
+        """Fetch data from TPU. Raises ServerError on token refresh failure."""
         try:
             # Ensure we have account context
             await self.client.get_account_info()
@@ -369,30 +382,12 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Save token data again in case it was refreshed during usage fetching
             await self._save_token_data()
 
-            self._consecutive_server_errors = 0
             return data
 
         except AuthError as err:
-            # Trigger reauth flow so user is prompted to re-authenticate
             raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
-        except ServerError as err:
-            self._consecutive_server_errors += 1
-            if self._consecutive_server_errors >= _SERVER_ERROR_REAUTH_THRESHOLD:
-                _LOGGER.warning(
-                    "Server error on token refresh for %d consecutive updates "
-                    "(likely expired token) - requesting reauth",
-                    self._consecutive_server_errors,
-                )
-                raise ConfigEntryAuthFailed(
-                    "Token refresh consistently failing - please re-authenticate"
-                ) from err
-            _LOGGER.warning(
-                "MyTPU server error (will retry, %d/%d): %s",
-                self._consecutive_server_errors,
-                _SERVER_ERROR_REAUTH_THRESHOLD,
-                err,
-            )
-            raise UpdateFailed(f"MyTPU server error: {err}") from err
+        except ServerError:
+            raise  # propagates to _async_update_data for re-login handling
         except MyTPUError as err:
             raise UpdateFailed(f"API request failed: {err}") from err
         except Exception as err:
@@ -400,6 +395,26 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise UpdateFailed(
                 f"Unexpected error communicating with TPU: {err}"
             ) from err
+
+    async def _relogin_or_raise(self, original_err: Exception) -> None:
+        """Re-login using stored credentials, or raise ConfigEntryAuthFailed."""
+        username = self.config_entry.data.get(CONF_USERNAME)
+        password = self.config_entry.data.get(CONF_PASSWORD)
+        if not username or not password:
+            _LOGGER.warning(
+                "Token refresh failed and no stored password — requesting reauth"
+            )
+            raise ConfigEntryAuthFailed(
+                "Token expired — please re-authenticate"
+            ) from original_err
+        _LOGGER.info("Token refresh failed (server error), attempting re-login")
+        try:
+            await self.client.async_login(username, password)
+            await self._save_token_data()
+            _LOGGER.info("Re-login successful")
+        except AuthError as err:
+            _LOGGER.error("Re-login failed: %s", err)
+            raise ConfigEntryAuthFailed(f"Re-login failed: {err}") from err
 
     async def _save_token_data(self) -> None:
         """Save updated token data to config entry if changed."""
