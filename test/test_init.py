@@ -354,13 +354,13 @@ class TestTPUDataUpdateCoordinator:
 
         mock_client = AsyncMock()
         # First call raises ServerError, second (after re-login) succeeds
-        mock_client.get_account_info = AsyncMock(
-            side_effect=[ServerError("500"), {}]
-        )
+        mock_client.get_account_info = AsyncMock(side_effect=[ServerError("500"), {}])
         mock_client.get_usage = AsyncMock(return_value=[])
         mock_client.get_token_data = MagicMock(return_value=None)
         mock_client.async_login = AsyncMock()
-        config_entry = make_config_entry(include_power=True, include_stored_password=True)
+        config_entry = make_config_entry(
+            include_power=True, include_stored_password=True
+        )
         coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
         with patch("custom_components.mytpu.get_last_statistics", return_value={}):
@@ -383,7 +383,9 @@ class TestTPUDataUpdateCoordinator:
             side_effect=ServerError("MyTPU server error: 500")
         )
         mock_client.async_login = AsyncMock(side_effect=AuthError("Bad password"))
-        config_entry = make_config_entry(include_power=True, include_stored_password=True)
+        config_entry = make_config_entry(
+            include_power=True, include_stored_password=True
+        )
         coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
         with pytest.raises(ConfigEntryAuthFailed):
