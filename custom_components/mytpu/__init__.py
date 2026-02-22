@@ -107,19 +107,13 @@ async def _background_token_refresh(
         except asyncio.CancelledError:
             _LOGGER.info("Background token refresh task cancelled")
             raise
-        except AuthError as err:
-            _LOGGER.warning(
-                "Background token refresh failed (auth error): %s. "
-                "User will need to reauth.",
-                err,
-            )
-            # Don't raise - let the coordinator handle reauth on next update
-        except ServerError as err:
+        except (AuthError, ServerError) as err:
             username = entry.data.get(CONF_USERNAME)
             password = entry.data.get(CONF_PASSWORD)
             if username and password:
                 _LOGGER.info(
-                    "Background token refresh failed (server error), attempting re-login"
+                    "Background token refresh failed (%s), attempting re-login",
+                    type(err).__name__,
                 )
                 try:
                     await client.async_login(username, password)
@@ -136,8 +130,8 @@ async def _background_token_refresh(
                     )
             else:
                 _LOGGER.warning(
-                    "Background token refresh failed (server error) and no stored "
-                    "credentials: %s. Will retry.",
+                    "Background token refresh failed and no stored credentials: %s. "
+                    "Will retry.",
                     err,
                 )
         except Exception as err:

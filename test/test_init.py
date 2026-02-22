@@ -811,8 +811,10 @@ class TestBackgroundTokenRefresh:
         mock_update.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_auth_error(self, hass: HomeAssistant, make_config_entry):
-        """Test loop continues after AuthError during refresh."""
+    async def test_auth_error_without_credentials(
+        self, hass: HomeAssistant, make_config_entry
+    ):
+        """Test loop continues after AuthError when no stored credentials."""
         from custom_components.mytpu.auth import AuthError
 
         mock_client = AsyncMock()
@@ -837,6 +839,47 @@ class TestBackgroundTokenRefresh:
 
         # Task should have continued (second sleep triggered CancelledError)
         assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_auth_error_with_credentials_relogin(
+        self, hass: HomeAssistant, make_config_entry
+    ):
+        """Test AuthError triggers re-login when stored credentials are available."""
+        import time
+
+        from custom_components.mytpu.auth import AuthError
+
+        new_token_data = {
+            "access_token": "relogged",
+            "refresh_token": "relogged_ref",
+            "expires_at": time.time() + 3600,
+            "customer_id": "C",
+        }
+        mock_client = AsyncMock()
+        mock_client.async_refresh_token_if_expiring = AsyncMock(
+            side_effect=AuthError("No refresh token available")
+        )
+        mock_client.async_login = AsyncMock()
+        mock_client.get_token_data = MagicMock(return_value=new_token_data)
+        config_entry = make_config_entry(include_stored_password=True)
+
+        call_count = 0
+
+        async def mock_sleep(duration):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                raise asyncio.CancelledError
+
+        with (
+            patch("asyncio.sleep", new=mock_sleep),
+            patch.object(hass.config_entries, "async_update_entry") as mock_update,
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await _background_token_refresh(hass, config_entry, mock_client)
+
+        mock_client.async_login.assert_called_once_with("user", "testpass")
+        mock_update.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_server_error_with_credentials_saves_token(
