@@ -163,6 +163,13 @@ class MyTPUClient:
 
         return readings
 
+    async def async_refresh_token_if_expiring(
+        self, min_remaining_seconds: float = 900
+    ) -> bool:
+        """Proactively refresh the token if it expires within min_remaining_seconds."""
+        session = await self._ensure_session()
+        return await self._auth.async_proactive_refresh(session, min_remaining_seconds)
+
     def get_token_data(self) -> dict | None:
         """Get current token data for storage."""
         return self._auth.get_token_data()

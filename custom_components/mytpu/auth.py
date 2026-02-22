@@ -26,6 +26,11 @@ class TokenInfo:
         """Check if the token is expired (with 60s buffer)."""
         return time.time() >= (self.expires_at - 60)
 
+    @property
+    def seconds_remaining(self) -> float:
+        """Seconds until token expires (negative if already expired)."""
+        return self.expires_at - time.time()
+
     def to_dict(self) -> dict:
         """Serialize token info to dictionary for storage."""
         return {
@@ -215,13 +220,47 @@ class MyTPUAuth:
         self._oauth_basic_token = match.group(1)
         return self._oauth_basic_token
 
+    async def async_proactive_refresh(
+        self, session: aiohttp.ClientSession, min_remaining_seconds: float = 900
+    ) -> bool:
+        """Refresh the token if it expires within min_remaining_seconds.
+
+        Unlike get_token(), this refreshes proactively before expiry rather than
+        waiting until the token has already expired. Returns True if a refresh
+        was attempted, False if the token is still fresh.
+        """
+        if self._token is None:
+            _LOGGER.debug("Proactive refresh: no token available, skipping")
+            return False
+
+        remaining = self._token.seconds_remaining
+        _LOGGER.debug(
+            "Proactive refresh check: %.0f seconds remaining (threshold: %.0f s)",
+            remaining,
+            min_remaining_seconds,
+        )
+
+        if remaining < min_remaining_seconds:
+            await self._refresh_token(session)
+            return True
+
+        return False
+
     async def _refresh_token(self, session: aiohttp.ClientSession) -> None:
         """Refresh the access token using the refresh token."""
         if not self._token or not self._token.refresh_token:
             _LOGGER.error("No refresh token available for token refresh")
             raise AuthError("No refresh token available")
 
-        _LOGGER.debug("Attempting to refresh token using refresh_token")
+        remaining = self._token.seconds_remaining
+        if remaining < 0:
+            _LOGGER.debug(
+                "Refreshing token that expired %.0f seconds ago", -remaining
+            )
+        else:
+            _LOGGER.debug(
+                "Refreshing token with %.0f seconds still remaining", remaining
+            )
         # Get the Basic auth token from the JS bundle
         basic_token = await self._get_oauth_basic_token(session)
 

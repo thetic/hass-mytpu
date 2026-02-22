@@ -70,10 +70,11 @@ def _service_from_config(config_json: str) -> Service:
 async def _background_token_refresh(
     hass: HomeAssistant, entry: ConfigEntry, client: MyTPUClient
 ) -> None:
-    """Background task to refresh tokens every 45 minutes.
+    """Background task to proactively refresh tokens before they expire.
 
-    MyTPU's refresh tokens only last 2 hours total, so we need to refresh
-    more frequently than the data update interval to keep tokens fresh.
+    Runs every 45 minutes. With a 1-hour token lifetime, this wakes up when
+    ~15 minutes remain and refreshes while the token is still valid — the
+    server may only accept refresh_token grants before the access_token expires.
     """
     _LOGGER.info("Starting background token refresh task (every 45 minutes)")
 
@@ -83,18 +84,27 @@ async def _background_token_refresh(
 
             _LOGGER.debug("Background token refresh: checking if refresh needed")
 
-            # Trigger a token check by calling get_account_info
-            # This will automatically refresh if the token is expired
-            await client.get_account_info()
+            # Proactively refresh if the token expires within 15 minutes (900s).
+            # This runs while the access_token is still valid, which may be
+            # required by the MyTPU server (it returns 500 for already-expired tokens).
+            refreshed = await client.async_refresh_token_if_expiring(
+                min_remaining_seconds=900
+            )
 
-            # Save the refreshed token
-            token_data = client.get_token_data()
-            if token_data and token_data != entry.data.get(CONF_TOKEN_DATA):
-                _LOGGER.info("Background token refresh: saving updated tokens")
-                new_data = {**entry.data, CONF_TOKEN_DATA: token_data}
-                hass.config_entries.async_update_entry(entry, data=new_data)
+            if refreshed:
+                token_data = client.get_token_data()
+                if token_data and token_data != entry.data.get(CONF_TOKEN_DATA):
+                    _LOGGER.info("Background token refresh: saving updated tokens")
+                    new_data = {**entry.data, CONF_TOKEN_DATA: token_data}
+                    hass.config_entries.async_update_entry(entry, data=new_data)
+                else:
+                    _LOGGER.debug(
+                        "Background token refresh: token data unchanged after refresh"
+                    )
             else:
-                _LOGGER.debug("Background token refresh: tokens unchanged")
+                _LOGGER.debug(
+                    "Background token refresh: token still fresh, no action needed"
+                )
 
         except asyncio.CancelledError:
             _LOGGER.info("Background token refresh task cancelled")
@@ -106,9 +116,14 @@ async def _background_token_refresh(
                 err,
             )
             # Don't raise - let the coordinator handle reauth on next update
+        except ServerError as err:
+            _LOGGER.warning(
+                "Background token refresh failed (server error): %s. Will retry.", err
+            )
         except Exception as err:
             _LOGGER.error(
-                "Background token refresh encountered error: %s. Will retry.", err
+                "Background token refresh encountered unexpected error: %s. Will retry.",
+                err,
             )
             # Continue running despite errors
 
