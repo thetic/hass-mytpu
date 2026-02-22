@@ -275,7 +275,7 @@ class MyTPUAuth:
         async with session.post(url, data=data, headers=headers) as resp:
             if resp.status != 200:
                 text = await resp.text()
-                _LOGGER.error(
+                _LOGGER.debug(
                     "Token refresh failed with status %s: %s", resp.status, text
                 )
                 # Distinguish between client errors (auth issues) and server errors
