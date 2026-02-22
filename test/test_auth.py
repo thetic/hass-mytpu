@@ -534,6 +534,92 @@ class TestMyTPUAuth:
             token = await auth.get_token(session)
             assert token == "valid_token"
 
+    @freeze_time("2026-01-17 12:00:00")
+    def test_seconds_remaining_positive(self):
+        """Test seconds_remaining when token is still valid."""
+        token = TokenInfo(
+            access_token="test",
+            refresh_token="refresh",
+            expires_at=time.time() + 1800,
+            customer_id="123",
+        )
+        assert token.seconds_remaining == pytest.approx(1800)
+
+    @freeze_time("2026-01-17 12:00:00")
+    def test_seconds_remaining_negative(self):
+        """Test seconds_remaining when token is already expired."""
+        token = TokenInfo(
+            access_token="test",
+            refresh_token="refresh",
+            expires_at=time.time() - 100,
+            customer_id="123",
+        )
+        assert token.seconds_remaining == pytest.approx(-100)
+
+    @pytest.mark.asyncio
+    @freeze_time("2026-01-17 12:00:00")
+    async def test_proactive_refresh_no_token(self):
+        """Test proactive refresh returns False when no token exists."""
+        auth = MyTPUAuth()
+        async with aiohttp.ClientSession() as session:
+            result = await auth.async_proactive_refresh(session)
+            assert result is False
+
+    @pytest.mark.asyncio
+    @freeze_time("2026-01-17 12:00:00")
+    async def test_proactive_refresh_token_fresh(self):
+        """Test proactive refresh returns False when token is still fresh."""
+        auth = MyTPUAuth()
+        auth._token = TokenInfo(
+            access_token="test",
+            refresh_token="refresh",
+            expires_at=time.time() + 1800,  # 30 min remaining, threshold 15 min
+            customer_id="123",
+        )
+        async with aiohttp.ClientSession() as session:
+            result = await auth.async_proactive_refresh(
+                session, min_remaining_seconds=900
+            )
+            assert result is False
+
+    @pytest.mark.asyncio
+    @freeze_time("2026-01-17 12:00:00")
+    async def test_proactive_refresh_token_expiring(self):
+        """Test proactive refresh refreshes and returns True when token expires soon."""
+        html = '<script src="main.abc123.js"></script>'
+        js = 'Authorization:"Basic dGVzdDp0ZXN0"'
+        refresh_response = {
+            "access_token": "new_access",
+            "refresh_token": "new_refresh",
+            "expires_in": 3600,
+            "user": {"customerId": "123"},
+        }
+
+        auth = MyTPUAuth()
+        auth._token = TokenInfo(
+            access_token="old_access",
+            refresh_token="old_refresh",
+            expires_at=time.time() + 600,  # 10 min remaining, threshold 15 min
+            customer_id="123",
+        )
+
+        async with aiohttp.ClientSession() as session:
+            with aioresponses() as m:
+                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
+                m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
+                m.post(
+                    f"{BASE_URL}/rest/oauth/token",
+                    status=200,
+                    payload=refresh_response,
+                )
+
+                result = await auth.async_proactive_refresh(
+                    session, min_remaining_seconds=900
+                )
+
+                assert result is True
+                assert auth._token.access_token == "new_access"
+
     @pytest.mark.asyncio
     async def test_get_auth_header(self, mock_token_response):
         """Test get_auth_header returns proper header."""

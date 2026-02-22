@@ -13,6 +13,7 @@ from homeassistant.util import dt as dt_util
 
 from custom_components.mytpu import (
     TPUDataUpdateCoordinator,
+    _background_token_refresh,
     _service_from_config,
     async_setup_entry,
     async_unload_entry,
@@ -134,6 +135,41 @@ async def test_async_setup_entry_migration_generic_failure(
         pytest.raises(ConfigEntryAuthFailed, match="Failed to migrate config"),
     ):
         await async_setup_entry(hass, config_entry)
+
+
+@pytest.mark.asyncio
+async def test_async_setup_entry_migration_success(
+    hass: HomeAssistant, make_config_entry, mock_migration_client_and_auth
+):
+    """Test successful migration saves token data alongside existing password."""
+    import time
+
+    token_data = {
+        "access_token": "migrated_access",
+        "refresh_token": "migrated_refresh",
+        "expires_at": time.time() + 3600,
+        "customer_id": "CUST123",
+    }
+
+    config_entry = make_config_entry(include_password=True)
+    config_entry.add_to_hass(hass)
+
+    mock_auth, mock_client = mock_migration_client_and_auth
+    mock_auth.async_login = AsyncMock()
+    mock_auth.get_token_data = MagicMock(return_value=token_data)
+
+    with (
+        patch("custom_components.mytpu.MyTPUAuth", return_value=mock_auth),
+        patch("custom_components.mytpu.MyTPUClient", return_value=mock_client),
+        patch.object(TPUDataUpdateCoordinator, "async_config_entry_first_refresh"),
+        patch.object(
+            hass.config_entries, "async_forward_entry_setups", return_value=None
+        ),
+    ):
+        result = await async_setup_entry(hass, config_entry)
+
+    assert result is True
+    assert config_entry.data.get(CONF_TOKEN_DATA) == token_data
 
 
 @pytest.mark.asyncio
@@ -679,3 +715,287 @@ class TestTPUDataUpdateCoordinator:
 
             # Hyphens should be replaced with underscores and lowercased (metadata is a dict)
             assert metadata["statistic_id"] == f"{DOMAIN}:p_mtr_123_abc_energy"
+
+
+class TestBackgroundTokenRefresh:
+    """Test _background_token_refresh function."""
+
+    @pytest.mark.asyncio
+    async def test_token_fresh(self, hass: HomeAssistant, make_config_entry):
+        """Test loop body when token is fresh: no refresh, no save."""
+        mock_client = AsyncMock()
+        mock_client.async_refresh_token_if_expiring = AsyncMock(return_value=False)
+        config_entry = make_config_entry()
+
+        call_count = 0
+
+        async def mock_sleep(duration):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                raise asyncio.CancelledError
+
+        with (
+            patch("asyncio.sleep", new=mock_sleep),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await _background_token_refresh(hass, config_entry, mock_client)
+
+        mock_client.async_refresh_token_if_expiring.assert_called_once_with(
+            min_remaining_seconds=900
+        )
+
+    @pytest.mark.asyncio
+    async def test_token_refreshed_save(self, hass: HomeAssistant, make_config_entry):
+        """Test loop body saves token when refresh succeeds and data changed."""
+        import time
+
+        new_token_data = {
+            "access_token": "new",
+            "refresh_token": "new_ref",
+            "expires_at": time.time() + 3600,
+            "customer_id": "C",
+        }
+        mock_client = AsyncMock()
+        mock_client.async_refresh_token_if_expiring = AsyncMock(return_value=True)
+        mock_client.get_token_data = MagicMock(return_value=new_token_data)
+        config_entry = make_config_entry()
+
+        call_count = 0
+
+        async def mock_sleep(duration):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                raise asyncio.CancelledError
+
+        with (
+            patch("asyncio.sleep", new=mock_sleep),
+            patch.object(hass.config_entries, "async_update_entry") as mock_update,
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await _background_token_refresh(hass, config_entry, mock_client)
+
+        mock_update.assert_called_once()
+        call_data = mock_update.call_args.kwargs["data"]
+        assert call_data[CONF_TOKEN_DATA] == new_token_data
+
+    @pytest.mark.asyncio
+    async def test_token_refreshed_no_change(
+        self, hass: HomeAssistant, make_config_entry
+    ):
+        """Test loop body skips save when token data is unchanged after refresh."""
+        mock_client = AsyncMock()
+        mock_client.async_refresh_token_if_expiring = AsyncMock(return_value=True)
+        config_entry = make_config_entry()
+        # Return the same token data already in the entry
+        mock_client.get_token_data = MagicMock(
+            return_value=config_entry.data.get(CONF_TOKEN_DATA)
+        )
+
+        call_count = 0
+
+        async def mock_sleep(duration):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                raise asyncio.CancelledError
+
+        with (
+            patch("asyncio.sleep", new=mock_sleep),
+            patch.object(hass.config_entries, "async_update_entry") as mock_update,
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await _background_token_refresh(hass, config_entry, mock_client)
+
+        mock_update.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_auth_error(self, hass: HomeAssistant, make_config_entry):
+        """Test loop continues after AuthError during refresh."""
+        from custom_components.mytpu.auth import AuthError
+
+        mock_client = AsyncMock()
+        mock_client.async_refresh_token_if_expiring = AsyncMock(
+            side_effect=AuthError("Token expired")
+        )
+        config_entry = make_config_entry()
+
+        call_count = 0
+
+        async def mock_sleep(duration):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                raise asyncio.CancelledError
+
+        with (
+            patch("asyncio.sleep", new=mock_sleep),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await _background_token_refresh(hass, config_entry, mock_client)
+
+        # Task should have continued (second sleep triggered CancelledError)
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_server_error_with_credentials_saves_token(
+        self, hass: HomeAssistant, make_config_entry
+    ):
+        """Test ServerError triggers re-login with stored credentials and saves token."""
+        import time
+
+        from custom_components.mytpu.auth import ServerError
+
+        new_token_data = {
+            "access_token": "relogged",
+            "refresh_token": "relogged_ref",
+            "expires_at": time.time() + 3600,
+            "customer_id": "C",
+        }
+        mock_client = AsyncMock()
+        mock_client.async_refresh_token_if_expiring = AsyncMock(
+            side_effect=ServerError("500")
+        )
+        mock_client.async_login = AsyncMock()
+        mock_client.get_token_data = MagicMock(return_value=new_token_data)
+        config_entry = make_config_entry(include_stored_password=True)
+
+        call_count = 0
+
+        async def mock_sleep(duration):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                raise asyncio.CancelledError
+
+        with (
+            patch("asyncio.sleep", new=mock_sleep),
+            patch.object(hass.config_entries, "async_update_entry") as mock_update,
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await _background_token_refresh(hass, config_entry, mock_client)
+
+        mock_client.async_login.assert_called_once_with("user", "testpass")
+        mock_update.assert_called_once()
+        assert mock_update.call_args.kwargs["data"][CONF_TOKEN_DATA] == new_token_data
+
+    @pytest.mark.asyncio
+    async def test_server_error_with_credentials_token_unchanged(
+        self, hass: HomeAssistant, make_config_entry
+    ):
+        """Test ServerError re-login skips save when token data is unchanged."""
+        from custom_components.mytpu.auth import ServerError
+
+        mock_client = AsyncMock()
+        mock_client.async_refresh_token_if_expiring = AsyncMock(
+            side_effect=ServerError("500")
+        )
+        mock_client.async_login = AsyncMock()
+        config_entry = make_config_entry(include_stored_password=True)
+        mock_client.get_token_data = MagicMock(
+            return_value=config_entry.data.get(CONF_TOKEN_DATA)
+        )
+
+        call_count = 0
+
+        async def mock_sleep(duration):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                raise asyncio.CancelledError
+
+        with (
+            patch("asyncio.sleep", new=mock_sleep),
+            patch.object(hass.config_entries, "async_update_entry") as mock_update,
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await _background_token_refresh(hass, config_entry, mock_client)
+
+        mock_client.async_login.assert_called_once()
+        mock_update.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_server_error_relogin_fails(
+        self, hass: HomeAssistant, make_config_entry
+    ):
+        """Test ServerError re-login failure logs warning and continues."""
+        from custom_components.mytpu.auth import AuthError, ServerError
+
+        mock_client = AsyncMock()
+        mock_client.async_refresh_token_if_expiring = AsyncMock(
+            side_effect=ServerError("500")
+        )
+        mock_client.async_login = AsyncMock(side_effect=AuthError("Bad password"))
+        config_entry = make_config_entry(include_stored_password=True)
+
+        call_count = 0
+
+        async def mock_sleep(duration):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                raise asyncio.CancelledError
+
+        with (
+            patch("asyncio.sleep", new=mock_sleep),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await _background_token_refresh(hass, config_entry, mock_client)
+
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_server_error_without_credentials(
+        self, hass: HomeAssistant, make_config_entry
+    ):
+        """Test ServerError with no stored credentials logs warning and continues."""
+        from custom_components.mytpu.auth import ServerError
+
+        mock_client = AsyncMock()
+        mock_client.async_refresh_token_if_expiring = AsyncMock(
+            side_effect=ServerError("500")
+        )
+        # Entry has no stored password
+        config_entry = make_config_entry()
+
+        call_count = 0
+
+        async def mock_sleep(duration):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                raise asyncio.CancelledError
+
+        with (
+            patch("asyncio.sleep", new=mock_sleep),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await _background_token_refresh(hass, config_entry, mock_client)
+
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_unexpected_exception(self, hass: HomeAssistant, make_config_entry):
+        """Test unexpected exception is logged and loop continues."""
+        mock_client = AsyncMock()
+        mock_client.async_refresh_token_if_expiring = AsyncMock(
+            side_effect=RuntimeError("Unexpected!")
+        )
+        config_entry = make_config_entry()
+
+        call_count = 0
+
+        async def mock_sleep(duration):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                raise asyncio.CancelledError
+
+        with (
+            patch("asyncio.sleep", new=mock_sleep),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await _background_token_refresh(hass, config_entry, mock_client)
+
+        assert call_count == 2
