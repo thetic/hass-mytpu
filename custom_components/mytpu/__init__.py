@@ -186,7 +186,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = TPUDataUpdateCoordinator(hass, client, entry)
     try:
         await coordinator.async_config_entry_first_refresh()
-    except Exception as err:
+    except Exception:
         await client.close()
         raise
 

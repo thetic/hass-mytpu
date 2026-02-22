@@ -254,9 +254,7 @@ class MyTPUAuth:
 
         remaining = self._token.seconds_remaining
         if remaining < 0:
-            _LOGGER.debug(
-                "Refreshing token that expired %.0f seconds ago", -remaining
-            )
+            _LOGGER.debug("Refreshing token that expired %.0f seconds ago", -remaining)
         else:
             _LOGGER.debug(
                 "Refreshing token with %.0f seconds still remaining", remaining

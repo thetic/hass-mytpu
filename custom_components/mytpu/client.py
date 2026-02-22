@@ -103,9 +103,7 @@ class MyTPUClient:
         for svc in services_data:
             _LOGGER.debug("get_account_info: service entry keys=%s", list(svc.keys()))
             self._services.append(Service.from_graph_response(svc))
-        _LOGGER.debug(
-            "get_account_info: parsed %d service(s)", len(self._services)
-        )
+        _LOGGER.debug("get_account_info: parsed %d service(s)", len(self._services))
 
         return result
 
