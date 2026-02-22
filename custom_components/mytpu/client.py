@@ -92,9 +92,20 @@ class MyTPUClient:
         # This contains the correct meter/service IDs needed for usage API
         account_summary = result.get("accountSummaryType", {})
         services_data = account_summary.get("servicesForGraph", [])
+        _LOGGER.debug(
+            "get_account_info: top-level keys=%s, accountSummaryType keys=%s, "
+            "servicesForGraph count=%d",
+            list(result.keys()),
+            list(account_summary.keys()),
+            len(services_data),
+        )
         self._services = []
         for svc in services_data:
+            _LOGGER.debug("get_account_info: service entry keys=%s", list(svc.keys()))
             self._services.append(Service.from_graph_response(svc))
+        _LOGGER.debug(
+            "get_account_info: parsed %d service(s)", len(self._services)
+        )
 
         return result
 
