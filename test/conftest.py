@@ -92,6 +92,7 @@ def mock_config_entry(
         version=1,
         data={
             CONF_USERNAME: mock_credentials[CONF_USERNAME],
+            CONF_PASSWORD: mock_credentials[CONF_PASSWORD],
             CONF_TOKEN_DATA: mock_token_data,
             CONF_POWER_SERVICE: json.dumps(
                 {
@@ -255,13 +256,19 @@ def mock_usage_response():
 def make_config_entry(mock_power_service):
     """Factory fixture for creating config entries with various configurations."""
 
-    def _make_entry(include_power=False, include_water=False, include_password=False):
+    def _make_entry(
+        include_power=False,
+        include_water=False,
+        include_password=False,
+        include_stored_password=False,
+    ):
         """Create a config entry with specified configuration.
 
         Args:
             include_power: Include power service config
             include_water: Include water service config
-            include_password: Use old password format instead of token_data
+            include_password: Use old password-only format (no token_data) for migration tests
+            include_stored_password: Include password alongside token_data (new format)
         """
         data = {CONF_USERNAME: "user"}
 
@@ -276,6 +283,8 @@ def make_config_entry(mock_power_service):
                 "expires_at": time.time() + 3600,
                 "customer_id": "CUST123",
             }
+            if include_stored_password:
+                data[CONF_PASSWORD] = "testpass"
 
         if include_power:
             data[CONF_POWER_SERVICE] = json.dumps(
@@ -303,7 +312,7 @@ def make_config_entry(mock_power_service):
             domain=DOMAIN,
             version=1,
             data=data,
-            unique_id=f"test_{include_power}_{include_water}_{include_password}",
+            unique_id=f"test_{include_power}_{include_water}_{include_password}_{include_stored_password}",
             title="Test",
         )
 

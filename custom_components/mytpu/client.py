@@ -92,9 +92,18 @@ class MyTPUClient:
         # This contains the correct meter/service IDs needed for usage API
         account_summary = result.get("accountSummaryType", {})
         services_data = account_summary.get("servicesForGraph", [])
+        _LOGGER.debug(
+            "get_account_info: top-level keys=%s, accountSummaryType keys=%s, "
+            "servicesForGraph count=%d",
+            list(result.keys()),
+            list(account_summary.keys()),
+            len(services_data),
+        )
         self._services = []
         for svc in services_data:
+            _LOGGER.debug("get_account_info: service entry keys=%s", list(svc.keys()))
             self._services.append(Service.from_graph_response(svc))
+        _LOGGER.debug("get_account_info: parsed %d service(s)", len(self._services))
 
         return result
 
@@ -162,6 +171,18 @@ class MyTPUClient:
                 readings.append(UsageReading.from_api_response(item))
 
         return readings
+
+    async def async_login(self, username: str, password: str) -> None:
+        """Perform a full login with username and password."""
+        session = await self._ensure_session()
+        await self._auth.async_login(username, password, session)
+
+    async def async_refresh_token_if_expiring(
+        self, min_remaining_seconds: float = 900
+    ) -> bool:
+        """Proactively refresh the token if it expires within min_remaining_seconds."""
+        session = await self._ensure_session()
+        return await self._auth.async_proactive_refresh(session, min_remaining_seconds)
 
     def get_token_data(self) -> dict | None:
         """Get current token data for storage."""

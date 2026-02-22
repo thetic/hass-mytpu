@@ -326,22 +326,69 @@ class TestTPUDataUpdateCoordinator:
             await coordinator._async_update_data()
 
     @pytest.mark.asyncio
-    async def test_async_update_data_server_error(
+    async def test_async_update_data_server_error_no_credentials(
         self, hass: HomeAssistant, make_config_entry
     ):
-        """Test data update with server error (should retry, not reauth)."""
+        """Test server error with no stored password triggers reauth immediately."""
+        from homeassistant.exceptions import ConfigEntryAuthFailed
+
         from custom_components.mytpu.auth import ServerError
 
         mock_client = AsyncMock()
         mock_client.get_account_info = AsyncMock(
             side_effect=ServerError("MyTPU server error: 500")
         )
+        # Entry has no stored password
         config_entry = make_config_entry(include_power=True)
         coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
 
-        # Server error should raise UpdateFailed (not ConfigEntryAuthFailed)
-        # This allows the coordinator to retry on the next update cycle
-        with pytest.raises(UpdateFailed, match="MyTPU server error"):
+        with pytest.raises(ConfigEntryAuthFailed):
+            await coordinator._async_update_data()
+
+    @pytest.mark.asyncio
+    async def test_async_update_data_server_error_relogin_success(
+        self, hass: HomeAssistant, make_config_entry
+    ):
+        """Test server error triggers re-login, then retries data fetch successfully."""
+        from custom_components.mytpu.auth import ServerError
+
+        mock_client = AsyncMock()
+        # First call raises ServerError, second (after re-login) succeeds
+        mock_client.get_account_info = AsyncMock(side_effect=[ServerError("500"), {}])
+        mock_client.get_usage = AsyncMock(return_value=[])
+        mock_client.get_token_data = MagicMock(return_value=None)
+        mock_client.async_login = AsyncMock()
+        config_entry = make_config_entry(
+            include_power=True, include_stored_password=True
+        )
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
+
+        with patch("custom_components.mytpu.get_last_statistics", return_value={}):
+            data = await coordinator._async_update_data()
+
+        mock_client.async_login.assert_called_once_with("user", "testpass")
+        assert data == {}
+
+    @pytest.mark.asyncio
+    async def test_async_update_data_server_error_relogin_fails(
+        self, hass: HomeAssistant, make_config_entry
+    ):
+        """Test server error where re-login fails triggers reauth."""
+        from homeassistant.exceptions import ConfigEntryAuthFailed
+
+        from custom_components.mytpu.auth import AuthError, ServerError
+
+        mock_client = AsyncMock()
+        mock_client.get_account_info = AsyncMock(
+            side_effect=ServerError("MyTPU server error: 500")
+        )
+        mock_client.async_login = AsyncMock(side_effect=AuthError("Bad password"))
+        config_entry = make_config_entry(
+            include_power=True, include_stored_password=True
+        )
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
+
+        with pytest.raises(ConfigEntryAuthFailed):
             await coordinator._async_update_data()
 
     @pytest.mark.asyncio

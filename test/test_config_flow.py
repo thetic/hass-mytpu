@@ -386,6 +386,7 @@ class TestTPUConfigFlow:
             assert result["type"] == FlowResultType.CREATE_ENTRY
             assert result["title"] == "TPU - Test User"
             assert CONF_USERNAME in result["data"]
+            assert CONF_PASSWORD in result["data"]
             assert CONF_TOKEN_DATA in result["data"]
             assert CONF_POWER_SERVICE in result["data"]
             assert CONF_WATER_SERVICE in result["data"]
@@ -556,7 +557,9 @@ class TestTPUConfigFlow:
             patch.object(
                 hass.config_entries, "async_update_entry"
             ) as mock_update_entry,
-            patch.object(hass.config_entries, "async_reload") as mock_reload,
+            patch.object(
+                hass.config_entries, "async_schedule_reload"
+            ) as mock_schedule_reload,
         ):
             mock_auth = AsyncMock()
             mock_auth.async_login = AsyncMock()
@@ -578,11 +581,12 @@ class TestTPUConfigFlow:
             assert result["type"] == FlowResultType.ABORT
             assert result["reason"] == "reauth_successful"
             mock_update_entry.assert_called_once()
-            mock_reload.assert_called_once_with(entry_id)
+            mock_schedule_reload.assert_called_once_with(entry_id)
 
             # Verify the updated entry data preserves existing services
             updated_data = mock_update_entry.call_args.kwargs["data"]
             assert updated_data[CONF_USERNAME] == mock_credentials[CONF_USERNAME]
+            assert updated_data[CONF_PASSWORD] == mock_credentials[CONF_PASSWORD]
             assert updated_data[CONF_TOKEN_DATA] == mock_token_data
             assert (
                 updated_data[CONF_POWER_SERVICE] == '{"meter_number": "existing_power"}'

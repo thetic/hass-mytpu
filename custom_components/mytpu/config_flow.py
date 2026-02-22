@@ -118,6 +118,7 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._data = {
                     "title": validation_result.title,
                     CONF_USERNAME: user_input[CONF_USERNAME],
+                    CONF_PASSWORD: user_input[CONF_PASSWORD],
                     CONF_TOKEN_DATA: validation_result.token_data,
                 }
                 self._services = validation_result.services
@@ -171,7 +172,6 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_reauth(self, entry_data: dict[str, Any]) -> ConfigFlowResult:
         """Handle re-authentication."""
-        self._data = entry_data
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
@@ -179,9 +179,10 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Handle re-authentication confirmation."""
         errors: dict[str, str] = {}
+        reauth_entry = self._get_reauth_entry()
         if user_input is not None:
             try:
-                username = self._data[CONF_USERNAME]
+                username = reauth_entry.data[CONF_USERNAME]
                 password = user_input[CONF_PASSWORD]
 
                 auth = MyTPUAuth()
@@ -193,23 +194,16 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
                     await client.get_account_info()
 
                 new_data = {
-                    CONF_USERNAME: username,
+                    **reauth_entry.data,
+                    CONF_PASSWORD: password,
                     CONF_TOKEN_DATA: auth.get_token_data(),
                 }
 
-                # Preserve existing selected services
-                if self._data.get(CONF_POWER_SERVICE):
-                    new_data[CONF_POWER_SERVICE] = self._data[CONF_POWER_SERVICE]
-                if self._data.get(CONF_WATER_SERVICE):
-                    new_data[CONF_WATER_SERVICE] = self._data[CONF_WATER_SERVICE]
-
-                entry = self.hass.config_entries.async_get_entry(
-                    self.context["entry_id"]
+                return self.async_update_reload_and_abort(
+                    reauth_entry,
+                    data=new_data,
+                    reason="reauth_successful",
                 )
-                if entry:
-                    self.hass.config_entries.async_update_entry(entry, data=new_data)
-                await self.hass.config_entries.async_reload(self.context["entry_id"])
-                return self.async_abort(reason="reauth_successful")
 
             except AuthError:  # direct login failures
                 errors["base"] = "invalid_auth"
@@ -223,16 +217,11 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(
-                        CONF_USERNAME, default=self._data.get(CONF_USERNAME, "")
-                    ): str,
-                    vol.Required(CONF_PASSWORD): str,
-                }
-            ),
+            data_schema=vol.Schema({vol.Required(CONF_PASSWORD): str}),
             errors=errors,
-            description_placeholders={"username": self._data.get(CONF_USERNAME, "")},
+            description_placeholders={
+                "username": reauth_entry.data.get(CONF_USERNAME, "")
+            },
         )
 
     def _build_meters_schema(self) -> vol.Schema:
