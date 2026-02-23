@@ -259,7 +259,6 @@ def make_config_entry(mock_power_service):
     def _make_entry(
         include_power=False,
         include_water=False,
-        include_password=False,
         include_stored_password=False,
     ):
         """Create a config entry with specified configuration.
@@ -267,24 +266,22 @@ def make_config_entry(mock_power_service):
         Args:
             include_power: Include power service config
             include_water: Include water service config
-            include_password: Use old password-only format (no token_data) for migration tests
-            include_stored_password: Include password alongside token_data (new format)
+            include_stored_password: Include password alongside token_data
         """
-        data = {CONF_USERNAME: "user"}
+        import time
 
-        if include_password:
-            data[CONF_PASSWORD] = "testpass"
-        else:
-            import time
-
-            data[CONF_TOKEN_DATA] = {
+        data = {
+            CONF_USERNAME: "user",
+            CONF_TOKEN_DATA: {
                 "access_token": "test_access",
                 "refresh_token": "test_refresh",
                 "expires_at": time.time() + 3600,
                 "customer_id": "CUST123",
-            }
-            if include_stored_password:
-                data[CONF_PASSWORD] = "testpass"
+            },
+        }
+
+        if include_stored_password:
+            data[CONF_PASSWORD] = "testpass"
 
         if include_power:
             data[CONF_POWER_SERVICE] = json.dumps(
@@ -312,26 +309,8 @@ def make_config_entry(mock_power_service):
             domain=DOMAIN,
             version=1,
             data=data,
-            unique_id=f"test_{include_power}_{include_water}_{include_password}_{include_stored_password}",
+            unique_id=f"test_{include_power}_{include_water}_{include_stored_password}",
             title="Test",
         )
 
     return _make_entry
-
-
-@pytest.fixture
-def mock_migration_client_and_auth():
-    """Return pre-configured mocks for migration testing."""
-    from unittest.mock import MagicMock
-
-    # Mock auth instance
-    mock_auth = MagicMock()
-    mock_auth.get_token_data = MagicMock(return_value=None)
-
-    # Mock client instance with context manager support
-    mock_client = MagicMock()
-    mock_client._session = MagicMock()
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
-
-    return mock_auth, mock_client
