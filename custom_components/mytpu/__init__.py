@@ -143,7 +143,12 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except ServerError as err:
             await self._relogin_or_raise(err)
             # Re-login succeeded — retry once with the fresh token
-            return await self._do_fetch()
+            try:
+                return await self._do_fetch()
+            except ServerError as retry_err:
+                raise UpdateFailed(
+                    f"MyTPU server error after re-login: {retry_err}"
+                ) from retry_err
 
     async def _do_fetch(self) -> dict[str, Any]:
         """Fetch data from TPU. Raises ServerError on token refresh failure."""

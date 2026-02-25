@@ -333,6 +333,29 @@ class TestTPUDataUpdateCoordinator:
             await coordinator._async_update_data()
 
     @pytest.mark.asyncio
+    async def test_async_update_data_server_error_retry_fails(
+        self, hass: HomeAssistant, make_config_entry
+    ):
+        """Test server error after successful re-login raises UpdateFailed."""
+        from homeassistant.helpers.update_coordinator import UpdateFailed
+
+        from custom_components.mytpu.auth import ServerError
+
+        mock_client = AsyncMock()
+        mock_client.get_account_info = AsyncMock(
+            side_effect=ServerError("MyTPU server error: 500")
+        )
+        mock_client.async_login = AsyncMock()
+        mock_client.get_token_data = MagicMock(return_value=None)
+        config_entry = make_config_entry(
+            include_power=True, include_stored_password=True
+        )
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
+
+        with pytest.raises(UpdateFailed, match="after re-login"):
+            await coordinator._async_update_data()
+
+    @pytest.mark.asyncio
     async def test_save_token_data(self, hass: HomeAssistant, mock_config_entry):
         """Test that token data is saved to config entry."""
         import time
