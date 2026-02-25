@@ -11,6 +11,7 @@ from custom_components.mytpu.auth import (
     BASE_URL,
     AuthError,
     MyTPUAuth,
+    ServerError,
     TokenInfo,
 )
 
@@ -179,7 +180,6 @@ class TestMyTPUAuth:
         auth = MyTPUAuth()
         assert auth.customer_id is None
 
-    @pytest.mark.asyncio
     async def test_get_oauth_basic_token_success(self):
         """Test successful extraction of OAuth basic token."""
         html = '<script src="main.abc123def456.js"></script>'
@@ -194,7 +194,6 @@ class TestMyTPUAuth:
                 token = await auth._get_oauth_basic_token(session)
                 assert token == "dGVzdDp0ZXN0"
 
-    @pytest.mark.asyncio
     async def test_get_oauth_basic_token_alternative_pattern(self):
         """Test extraction with alternative JS pattern."""
         html = '<head><script src="main.fed789abc123.js"></script></head>'
@@ -209,7 +208,6 @@ class TestMyTPUAuth:
                 token = await auth._get_oauth_basic_token(session)
                 assert token == "YWx0ZXJuYXRpdmU="
 
-    @pytest.mark.asyncio
     async def test_get_oauth_basic_token_caching(self):
         """Test that Basic token is cached after first fetch."""
         html = '<script src="main.abc123.js"></script>'
@@ -228,7 +226,6 @@ class TestMyTPUAuth:
                 token2 = await auth._get_oauth_basic_token(session)
                 assert token2 == "dGVzdA=="
 
-    @pytest.mark.asyncio
     async def test_get_oauth_basic_token_no_main_js(self):
         """Test error when main.js not found in HTML."""
         html = '<script src="other.js"></script>'
@@ -241,7 +238,6 @@ class TestMyTPUAuth:
                 with pytest.raises(AuthError, match="Could not find main.js"):
                     await auth._get_oauth_basic_token(session)
 
-    @pytest.mark.asyncio
     async def test_get_oauth_basic_token_login_page_error(self):
         """Test error when login page fetch fails."""
         auth = MyTPUAuth()
@@ -252,7 +248,6 @@ class TestMyTPUAuth:
                 with pytest.raises(AuthError, match="Failed to fetch login page"):
                     await auth._get_oauth_basic_token(session)
 
-    @pytest.mark.asyncio
     async def test_get_oauth_basic_token_js_fetch_error(self):
         """Test error when JS bundle fetch fails."""
         html = '<script src="main.abc123.js"></script>'
@@ -266,7 +261,6 @@ class TestMyTPUAuth:
                 with pytest.raises(AuthError, match="Failed to fetch main.abc123.js"):
                     await auth._get_oauth_basic_token(session)
 
-    @pytest.mark.asyncio
     async def test_get_oauth_basic_token_no_token_in_js(self):
         """Test error when Basic token not found in JS."""
         html = '<script src="main.abc123.js"></script>'
@@ -283,7 +277,6 @@ class TestMyTPUAuth:
                 ):
                     await auth._get_oauth_basic_token(session)
 
-    @pytest.mark.asyncio
     @freeze_time("2026-01-17 12:00:00")
     async def test_refresh_token_success(self):
         """Test successful token refresh."""
@@ -322,7 +315,6 @@ class TestMyTPUAuth:
                 assert auth._token.refresh_token == "new_refresh_token"
                 assert auth._token.customer_id == "CUST123"
 
-    @pytest.mark.asyncio
     async def test_refresh_token_no_token(self):
         """Test refresh token fails when no token exists."""
         auth = MyTPUAuth()
@@ -331,7 +323,6 @@ class TestMyTPUAuth:
             with pytest.raises(AuthError, match="No refresh token available"):
                 await auth._refresh_token(session)
 
-    @pytest.mark.asyncio
     async def test_refresh_token_no_refresh_token(self):
         """Test refresh token fails when refresh token is empty."""
         auth = MyTPUAuth()
@@ -346,7 +337,6 @@ class TestMyTPUAuth:
             with pytest.raises(AuthError, match="No refresh token available"):
                 await auth._refresh_token(session)
 
-    @pytest.mark.asyncio
     @freeze_time("2026-01-17 12:00:00")
     async def test_refresh_token_api_error(self):
         """Test refresh token handles API errors (4xx)."""
@@ -374,11 +364,9 @@ class TestMyTPUAuth:
                 with pytest.raises(AuthError, match="Token refresh failed: 400"):
                     await auth._refresh_token(session)
 
-    @pytest.mark.asyncio
     @freeze_time("2026-01-17 12:00:00")
     async def test_refresh_token_server_error(self):
         """Test refresh token handles server errors (5xx)."""
-        from custom_components.mytpu.auth import ServerError
 
         html = '<script src="main.abc123.js"></script>'
         js = 'Authorization:"Basic dGVzdDp0ZXN0"'
@@ -405,7 +393,6 @@ class TestMyTPUAuth:
                 with pytest.raises(ServerError, match="MyTPU server error"):
                     await auth._refresh_token(session)
 
-    @pytest.mark.asyncio
     @freeze_time("2026-01-17 12:00:00")
     async def test_get_token_when_none(self, mock_token_response):
         """Test get_token when no token exists."""
@@ -416,7 +403,6 @@ class TestMyTPUAuth:
             ):
                 await auth.get_token(session)
 
-    @pytest.mark.asyncio
     @freeze_time("2026-01-17 12:00:00")
     async def test_get_token_when_expired_refresh_success(self):
         """Test get_token refreshes token when expired."""
@@ -455,7 +441,6 @@ class TestMyTPUAuth:
                 assert auth._token.refresh_token == "refreshed_refresh_token"
                 assert auth._token.customer_id == "CUST123"
 
-    @pytest.mark.asyncio
     @freeze_time("2026-01-17 12:00:00")
     async def test_get_token_when_expired_refresh_fails(self):
         """Test get_token raises AuthError when refresh fails."""
@@ -485,11 +470,9 @@ class TestMyTPUAuth:
                 with pytest.raises(AuthError, match="Token refresh failed."):
                     await auth.get_token(session)
 
-    @pytest.mark.asyncio
     @freeze_time("2026-01-17 12:00:00")
     async def test_get_token_when_expired_refresh_server_error(self):
         """Test get_token propagates ServerError when refresh encounters server error."""
-        from custom_components.mytpu.auth import ServerError
 
         html = '<script src="main.abc123.js"></script>'
         js = 'Authorization:"Basic dGVzdDp0ZXN0"'
@@ -518,7 +501,6 @@ class TestMyTPUAuth:
                 with pytest.raises(ServerError, match="MyTPU server error"):
                     await auth.get_token(session)
 
-    @pytest.mark.asyncio
     @freeze_time("2026-01-17 12:00:00")
     async def test_get_token_when_valid(self):
         """Test get_token when token is still valid."""
@@ -556,7 +538,6 @@ class TestMyTPUAuth:
         )
         assert token.seconds_remaining == pytest.approx(-100)
 
-    @pytest.mark.asyncio
     async def test_get_auth_header(self, mock_token_response):
         """Test get_auth_header returns proper header."""
         html = '<script src="main.abc123.js"></script>'

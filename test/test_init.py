@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.const import CONF_USERNAME
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -16,6 +17,8 @@ from custom_components.mytpu import (
     async_setup_entry,
     async_unload_entry,
 )
+from custom_components.mytpu.auth import AuthError, ServerError
+from custom_components.mytpu.client import MyTPUError
 from custom_components.mytpu.const import CONF_TOKEN_DATA, DOMAIN
 from custom_components.mytpu.models import Service, ServiceType, UsageReading
 
@@ -63,7 +66,6 @@ def test_service_from_config_minimal():
     assert service.totalizer is False
 
 
-@pytest.mark.asyncio
 async def test_async_setup_entry(hass: HomeAssistant, mock_config_entry):
     """Test successful setup of config entry."""
     # Add the config entry to hass before setup
@@ -91,7 +93,6 @@ async def test_async_setup_entry(hass: HomeAssistant, mock_config_entry):
             mock_forward.assert_called_once()
 
 
-@pytest.mark.asyncio
 async def test_async_unload_entry(hass: HomeAssistant, mock_config_entry):
     """Test unloading a config entry."""
     mock_coordinator = MagicMock()
@@ -135,7 +136,6 @@ class TestTPUDataUpdateCoordinator:
         assert coordinator.power_service is not None
         assert coordinator.water_service is None
 
-    @pytest.mark.asyncio
     async def test_async_update_data_success(
         self,
         hass: HomeAssistant,
@@ -200,7 +200,6 @@ class TestTPUDataUpdateCoordinator:
             # Verify statistics import was called
             assert mock_import.call_count == 2
 
-    @pytest.mark.asyncio
     async def test_async_update_data_no_readings(
         self, hass: HomeAssistant, make_config_entry
     ):
@@ -217,7 +216,6 @@ class TestTPUDataUpdateCoordinator:
 
         assert data == {}
 
-    @pytest.mark.asyncio
     async def test_async_update_data_error(
         self, hass: HomeAssistant, make_config_entry
     ):
@@ -232,14 +230,10 @@ class TestTPUDataUpdateCoordinator:
         ):
             await coordinator._async_update_data()
 
-    @pytest.mark.asyncio
     async def test_async_update_data_auth_error(
         self, hass: HomeAssistant, make_config_entry
     ):
         """Test data update with authentication error."""
-        from homeassistant.exceptions import ConfigEntryAuthFailed
-
-        from custom_components.mytpu.auth import AuthError
 
         mock_client = AsyncMock()
         mock_client.get_account_info = AsyncMock(side_effect=AuthError("Token expired"))
@@ -249,12 +243,10 @@ class TestTPUDataUpdateCoordinator:
         with pytest.raises(ConfigEntryAuthFailed, match="Authentication failed"):
             await coordinator._async_update_data()
 
-    @pytest.mark.asyncio
     async def test_async_update_data_mytpu_error(
         self, hass: HomeAssistant, make_config_entry
     ):
         """Test data update with MyTPU API error."""
-        from custom_components.mytpu.client import MyTPUError
 
         mock_client = AsyncMock()
         mock_client.get_account_info = AsyncMock(
@@ -266,14 +258,10 @@ class TestTPUDataUpdateCoordinator:
         with pytest.raises(UpdateFailed, match="API request failed"):
             await coordinator._async_update_data()
 
-    @pytest.mark.asyncio
     async def test_async_update_data_server_error_no_credentials(
         self, hass: HomeAssistant, make_config_entry
     ):
         """Test server error with no stored password triggers reauth immediately."""
-        from homeassistant.exceptions import ConfigEntryAuthFailed
-
-        from custom_components.mytpu.auth import ServerError
 
         mock_client = AsyncMock()
         mock_client.get_account_info = AsyncMock(
@@ -286,12 +274,10 @@ class TestTPUDataUpdateCoordinator:
         with pytest.raises(ConfigEntryAuthFailed):
             await coordinator._async_update_data()
 
-    @pytest.mark.asyncio
     async def test_async_update_data_server_error_relogin_success(
         self, hass: HomeAssistant, make_config_entry
     ):
         """Test server error triggers re-login, then retries data fetch successfully."""
-        from custom_components.mytpu.auth import ServerError
 
         mock_client = AsyncMock()
         # First call raises ServerError, second (after re-login) succeeds
@@ -310,14 +296,10 @@ class TestTPUDataUpdateCoordinator:
         mock_client.async_login.assert_called_once_with("user", "testpass")
         assert data == {}
 
-    @pytest.mark.asyncio
     async def test_async_update_data_server_error_relogin_fails(
         self, hass: HomeAssistant, make_config_entry
     ):
         """Test server error where re-login fails triggers reauth."""
-        from homeassistant.exceptions import ConfigEntryAuthFailed
-
-        from custom_components.mytpu.auth import AuthError, ServerError
 
         mock_client = AsyncMock()
         mock_client.get_account_info = AsyncMock(
@@ -332,14 +314,10 @@ class TestTPUDataUpdateCoordinator:
         with pytest.raises(ConfigEntryAuthFailed):
             await coordinator._async_update_data()
 
-    @pytest.mark.asyncio
     async def test_async_update_data_server_error_retry_fails(
         self, hass: HomeAssistant, make_config_entry
     ):
         """Test server error after successful re-login raises UpdateFailed."""
-        from homeassistant.helpers.update_coordinator import UpdateFailed
-
-        from custom_components.mytpu.auth import ServerError
 
         mock_client = AsyncMock()
         mock_client.get_account_info = AsyncMock(
@@ -355,7 +333,6 @@ class TestTPUDataUpdateCoordinator:
         with pytest.raises(UpdateFailed, match="after re-login"):
             await coordinator._async_update_data()
 
-    @pytest.mark.asyncio
     async def test_save_token_data(self, hass: HomeAssistant, mock_config_entry):
         """Test that token data is saved to config entry."""
         import time
@@ -384,7 +361,6 @@ class TestTPUDataUpdateCoordinator:
             assert CONF_TOKEN_DATA in call_args.kwargs["data"]
             assert call_args.kwargs["data"][CONF_TOKEN_DATA] == token_data
 
-    @pytest.mark.asyncio
     async def test_save_token_data_no_change(
         self, hass: HomeAssistant, mock_token_data
     ):
@@ -416,7 +392,6 @@ class TestTPUDataUpdateCoordinator:
             # Should not update if data is unchanged
             mock_update.assert_not_called()
 
-    @pytest.mark.asyncio
     async def test_import_statistics_new_data(
         self, hass: HomeAssistant, mock_power_service, make_config_entry
     ):
@@ -468,7 +443,6 @@ class TestTPUDataUpdateCoordinator:
             assert statistics[2]["state"] == 28.3
             assert statistics[2]["sum"] == 53.8  # 25.5 + 28.3
 
-    @pytest.mark.asyncio
     async def test_import_statistics_with_previous_data(
         self, hass: HomeAssistant, mock_power_service, make_config_entry
     ):
@@ -518,7 +492,6 @@ class TestTPUDataUpdateCoordinator:
             # Sum should continue from previous (statistics items are dicts)
             assert statistics[0]["sum"] == 130.0  # 100.0 + 30.0
 
-    @pytest.mark.asyncio
     async def test_import_statistics_skip_duplicates(
         self, hass: HomeAssistant, mock_power_service, make_config_entry
     ):
@@ -566,7 +539,6 @@ class TestTPUDataUpdateCoordinator:
             # Should not add any statistics (all duplicates)
             mock_add_stats.assert_not_called()
 
-    @pytest.mark.asyncio
     async def test_import_statistics_water(
         self, hass: HomeAssistant, mock_water_service, make_config_entry
     ):
@@ -603,7 +575,6 @@ class TestTPUDataUpdateCoordinator:
             assert "TPU Water" in metadata["name"]
             assert metadata["unit_class"] == "volume"
 
-    @pytest.mark.asyncio
     async def test_import_statistics_meter_id_sanitization(
         self, hass: HomeAssistant, make_config_entry
     ):
