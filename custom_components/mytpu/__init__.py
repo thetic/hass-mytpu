@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import contextlib
 import json
 import logging
 from datetime import datetime, timedelta
@@ -65,83 +63,6 @@ def _service_from_config(config_json: str) -> Service:
     )
 
 
-async def _background_token_refresh(
-    hass: HomeAssistant, entry: ConfigEntry, client: MyTPUClient
-) -> None:
-    """Background task to proactively refresh tokens before they expire.
-
-    Runs every 45 minutes. With a 1-hour token lifetime, this wakes up when
-    ~15 minutes remain and refreshes while the token is still valid — the
-    server may only accept refresh_token grants before the access_token expires.
-    """
-    _LOGGER.info("Starting background token refresh task (every 45 minutes)")
-
-    while True:
-        try:
-            await asyncio.sleep(45 * 60)  # 45 minutes
-
-            _LOGGER.debug("Background token refresh: checking if refresh needed")
-
-            # Proactively refresh if the token expires within 15 minutes (900s).
-            # This runs while the access_token is still valid, which may be
-            # required by the MyTPU server (it returns 500 for already-expired tokens).
-            refreshed = await client.async_refresh_token_if_expiring(
-                min_remaining_seconds=900
-            )
-
-            if refreshed:
-                token_data = client.get_token_data()
-                if token_data and token_data != entry.data.get(CONF_TOKEN_DATA):
-                    _LOGGER.info("Background token refresh: saving updated tokens")
-                    new_data = {**entry.data, CONF_TOKEN_DATA: token_data}
-                    hass.config_entries.async_update_entry(entry, data=new_data)
-                else:
-                    _LOGGER.debug(
-                        "Background token refresh: token data unchanged after refresh"
-                    )
-            else:
-                _LOGGER.debug(
-                    "Background token refresh: token still fresh, no action needed"
-                )
-
-        except asyncio.CancelledError:
-            _LOGGER.info("Background token refresh task cancelled")
-            raise
-        except (AuthError, ServerError) as err:
-            username = entry.data.get(CONF_USERNAME)
-            password = entry.data.get(CONF_PASSWORD)
-            if username and password:
-                _LOGGER.info(
-                    "Background token refresh failed (%s), attempting re-login",
-                    type(err).__name__,
-                )
-                try:
-                    await client.async_login(username, password)
-                    token_data = client.get_token_data()
-                    if token_data and token_data != entry.data.get(CONF_TOKEN_DATA):
-                        _LOGGER.info("Background re-login: saving updated tokens")
-                        new_data = {**entry.data, CONF_TOKEN_DATA: token_data}
-                        hass.config_entries.async_update_entry(entry, data=new_data)
-                    else:
-                        _LOGGER.debug("Background re-login: token data unchanged")
-                except AuthError as login_err:
-                    _LOGGER.warning(
-                        "Background re-login failed: %s. Will retry.", login_err
-                    )
-            else:
-                _LOGGER.warning(
-                    "Background token refresh failed and no stored credentials: %s. "
-                    "Will retry.",
-                    err,
-                )
-        except Exception as err:
-            _LOGGER.error(
-                "Background token refresh encountered unexpected error: %s. Will retry.",
-                err,
-            )
-            # Continue running despite errors
-
-
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Tacoma Public Utilities from a config entry."""
     hass.data.setdefault(DOMAIN, {})
@@ -156,25 +77,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await client.close()
         raise
 
-    # Start background token refresh task to keep tokens fresh
-    # MyTPU's refresh tokens only last 2 hours, so we refresh every 45 minutes
-    refresh_task = hass.async_create_task(
-        _background_token_refresh(hass, entry, client),
-        name=f"mytpu_token_refresh_{entry.entry_id}",
-    )
-
-    # Store coordinator and refresh task
-    hass.data[DOMAIN][entry.entry_id] = {
-        "coordinator": coordinator,
-        "refresh_task": refresh_task,
-    }
+    hass.data[DOMAIN][entry.entry_id] = {"coordinator": coordinator}
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     entry.async_on_unload(entry.add_update_listener(update_listener))
-
-    # Ensure refresh task is cancelled when entry is unloaded
-    entry.async_on_unload(lambda: refresh_task.cancel())
 
     return True
 
@@ -188,15 +95,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         entry_data = hass.data[DOMAIN].pop(entry.entry_id)
-        coordinator = entry_data["coordinator"]
-        refresh_task = entry_data["refresh_task"]
-
-        # Cancel the background refresh task
-        refresh_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await refresh_task
-
-        await coordinator.client.close()
+        await entry_data["coordinator"].client.close()
 
     return unload_ok
 

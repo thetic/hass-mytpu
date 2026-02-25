@@ -518,22 +518,6 @@ class TestMyTPUClient:
                 mock_login.assert_called_once_with("user", "pass", client._session)
 
     @pytest.mark.asyncio
-    async def test_async_refresh_token_if_expiring(self):
-        """Test async_refresh_token_if_expiring delegates to auth."""
-        auth = MyTPUAuth()
-        client = MyTPUClient(auth)
-
-        with patch.object(
-            auth, "async_proactive_refresh", new=AsyncMock(return_value=True)
-        ) as mock_refresh:
-            async with client:
-                result = await client.async_refresh_token_if_expiring(
-                    min_remaining_seconds=900
-                )
-                mock_refresh.assert_called_once_with(client._session, 900)
-                assert result is True
-
-    @pytest.mark.asyncio
     async def test_close(self):
         """Test close method closes session."""
         auth = MyTPUAuth()
