@@ -163,6 +163,11 @@ class MyTPUClient:
 
         return readings
 
+    async def async_login(self, username: str, password: str) -> None:
+        """Perform a full login with username and password."""
+        session = await self._ensure_session()
+        await self._auth.async_login(username, password, session)
+
     def get_token_data(self) -> dict | None:
         """Get current token data for storage."""
         return self._auth.get_token_data()

@@ -29,7 +29,6 @@ from custom_components.mytpu.const import (
 from custom_components.mytpu.models import Service, ServiceType
 
 
-@pytest.mark.asyncio
 async def test_validate_and_fetch_services_success(
     hass: HomeAssistant, mock_credentials, mock_account_info, mock_token_data
 ):
@@ -70,7 +69,6 @@ async def test_validate_and_fetch_services_success(
         assert validation_result.token_data == mock_token_data
 
 
-@pytest.mark.asyncio
 async def test_validate_and_fetch_services_auth_error(
     hass: HomeAssistant, mock_credentials
 ):
@@ -95,7 +93,6 @@ async def test_validate_and_fetch_services_auth_error(
             await validate_and_fetch_services(hass, mock_credentials)
 
 
-@pytest.mark.asyncio
 async def test_validate_and_fetch_services_connection_error(
     hass: HomeAssistant, mock_credentials, mock_token_data
 ):
@@ -119,7 +116,6 @@ async def test_validate_and_fetch_services_connection_error(
             await validate_and_fetch_services(hass, mock_credentials)
 
 
-@pytest.mark.asyncio
 async def test_validate_and_fetch_services_session_none_for_login(
     hass: HomeAssistant, mock_credentials
 ):
@@ -142,7 +138,6 @@ async def test_validate_and_fetch_services_session_none_for_login(
             await validate_and_fetch_services(hass, mock_credentials)
 
 
-@pytest.mark.asyncio
 async def test_validate_and_fetch_services_no_token_data(
     hass: HomeAssistant, mock_credentials, mock_account_info
 ):
@@ -174,7 +169,6 @@ async def test_validate_and_fetch_services_no_token_data(
 class TestTPUConfigFlow:
     """Test TPU config flow."""
 
-    @pytest.mark.asyncio
     async def test_form_user_step(self, hass: HomeAssistant):
         """Test we get the form for user step."""
         result = await hass.config_entries.flow.async_init(
@@ -184,7 +178,6 @@ class TestTPUConfigFlow:
         assert result["step_id"] == "user"
         assert result["errors"] == {}
 
-    @pytest.mark.asyncio
     async def test_user_step_success(
         self, hass: HomeAssistant, mock_credentials, mock_account_info, mock_token_data
     ):
@@ -219,7 +212,6 @@ class TestTPUConfigFlow:
             assert result["step_id"] == "meters"
             assert "errors" not in result or result["errors"] in (None, {})
 
-    @pytest.mark.asyncio
     async def test_user_step_cannot_connect(
         self, hass: HomeAssistant, mock_credentials
     ):
@@ -241,7 +233,6 @@ class TestTPUConfigFlow:
             assert result["type"] == FlowResultType.FORM
             assert result["errors"] == {"base": "cannot_connect"}
 
-    @pytest.mark.asyncio
     async def test_user_step_invalid_auth(self, hass: HomeAssistant, mock_credentials):
         """Test user step with invalid credentials."""
         with patch(
@@ -261,7 +252,6 @@ class TestTPUConfigFlow:
             assert result["type"] == FlowResultType.FORM
             assert result["errors"] == {"base": "invalid_auth"}
 
-    @pytest.mark.asyncio
     async def test_user_step_unknown_error(self, hass: HomeAssistant, mock_credentials):
         """Test user step with unexpected error."""
         with patch(
@@ -281,7 +271,6 @@ class TestTPUConfigFlow:
             assert result["type"] == FlowResultType.FORM
             assert result["errors"] == {"base": "unknown"}
 
-    @pytest.mark.asyncio
     async def test_user_step_abort_if_unique_id_configured(
         self, hass: HomeAssistant, mock_credentials, mock_token_data
     ):
@@ -316,7 +305,6 @@ class TestTPUConfigFlow:
             assert result["type"] == FlowResultType.ABORT
             assert result["reason"] == "already_configured"
 
-    @pytest.mark.asyncio
     async def test_meters_step_both_services(
         self,
         hass: HomeAssistant,
@@ -386,11 +374,11 @@ class TestTPUConfigFlow:
             assert result["type"] == FlowResultType.CREATE_ENTRY
             assert result["title"] == "TPU - Test User"
             assert CONF_USERNAME in result["data"]
+            assert CONF_PASSWORD in result["data"]
             assert CONF_TOKEN_DATA in result["data"]
             assert CONF_POWER_SERVICE in result["data"]
             assert CONF_WATER_SERVICE in result["data"]
 
-    @pytest.mark.asyncio
     async def test_meters_step_power_only(
         self, hass: HomeAssistant, mock_credentials, mock_token_data, mock_power_service
     ):
@@ -438,7 +426,6 @@ class TestTPUConfigFlow:
             assert CONF_POWER_SERVICE in result["data"]
             assert CONF_WATER_SERVICE not in result["data"]
 
-    @pytest.mark.asyncio
     async def test_meters_step_water_only(
         self, hass: HomeAssistant, mock_credentials, mock_token_data, mock_water_service
     ):
@@ -486,7 +473,6 @@ class TestTPUConfigFlow:
             assert CONF_WATER_SERVICE in result["data"]
             assert CONF_POWER_SERVICE not in result["data"]
 
-    @pytest.mark.asyncio
     async def test_meters_step_no_selection(
         self, hass: HomeAssistant, mock_credentials, mock_token_data, mock_power_service
     ):
@@ -519,7 +505,6 @@ class TestTPUConfigFlow:
             assert result["step_id"] == "meters"
             assert result["errors"] == {"base": "no_meters"}
 
-    @pytest.mark.asyncio
     async def test_reauth_confirm_success(
         self, hass: HomeAssistant, mock_credentials, mock_account_info, mock_token_data
     ):
@@ -556,7 +541,9 @@ class TestTPUConfigFlow:
             patch.object(
                 hass.config_entries, "async_update_entry"
             ) as mock_update_entry,
-            patch.object(hass.config_entries, "async_reload") as mock_reload,
+            patch.object(
+                hass.config_entries, "async_schedule_reload"
+            ) as mock_schedule_reload,
         ):
             mock_auth = AsyncMock()
             mock_auth.async_login = AsyncMock()
@@ -578,18 +565,18 @@ class TestTPUConfigFlow:
             assert result["type"] == FlowResultType.ABORT
             assert result["reason"] == "reauth_successful"
             mock_update_entry.assert_called_once()
-            mock_reload.assert_called_once_with(entry_id)
+            mock_schedule_reload.assert_called_once_with(entry_id)
 
             # Verify the updated entry data preserves existing services
             updated_data = mock_update_entry.call_args.kwargs["data"]
             assert updated_data[CONF_USERNAME] == mock_credentials[CONF_USERNAME]
+            assert updated_data[CONF_PASSWORD] == mock_credentials[CONF_PASSWORD]
             assert updated_data[CONF_TOKEN_DATA] == mock_token_data
             assert (
                 updated_data[CONF_POWER_SERVICE] == '{"meter_number": "existing_power"}'
             )
             assert CONF_WATER_SERVICE not in updated_data
 
-    @pytest.mark.asyncio
     async def test_reauth_confirm_invalid_auth(
         self, hass: HomeAssistant, mock_credentials
     ):
@@ -640,7 +627,6 @@ class TestTPUConfigFlow:
             assert result["type"] == FlowResultType.FORM
             assert result["errors"] == {"base": "invalid_auth"}
 
-    @pytest.mark.asyncio
     async def test_reauth_confirm_cannot_connect(
         self, hass: HomeAssistant, mock_credentials
     ):
@@ -693,7 +679,6 @@ class TestTPUConfigFlow:
             assert result["type"] == FlowResultType.FORM
             assert result["errors"] == {"base": "cannot_connect"}
 
-    @pytest.mark.asyncio
     async def test_reauth_confirm_unexpected_error(
         self, hass: HomeAssistant, mock_credentials
     ):
@@ -750,7 +735,6 @@ class TestTPUConfigFlow:
 class TestTPUOptionsFlow:
     """Test TPU options flow."""
 
-    @pytest.mark.asyncio
     async def test_options_flow_init(self, hass: HomeAssistant):
         """Test the initialization of the options flow."""
         mock_config_entry = MockConfigEntry(
@@ -780,7 +764,6 @@ class TestTPUOptionsFlow:
         assert optional_key is not None
         assert optional_key.default() == 5
 
-    @pytest.mark.asyncio
     async def test_options_flow_update(self, hass: HomeAssistant):
         """Test updating options."""
         mock_config_entry = MockConfigEntry(
