@@ -33,7 +33,7 @@ class MyTPUClient:
 
     async def __aenter__(self) -> "MyTPUClient":
         """Enter async context."""
-        self._session = aiohttp.ClientSession()
+        self._session = self._create_session()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
@@ -42,10 +42,17 @@ class MyTPUClient:
             await self._session.close()
             self._session = None
 
+    def _create_session(self) -> aiohttp.ClientSession:
+        return aiohttp.ClientSession(
+            headers={
+                "User-Agent": "hass-mytpu",
+            }
+        )
+
     async def _ensure_session(self) -> aiohttp.ClientSession:
         """Ensure we have an active session."""
         if self._session is None:
-            self._session = aiohttp.ClientSession()
+            self._session = self._create_session()
         return self._session
 
     async def _request(
