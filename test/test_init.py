@@ -433,12 +433,9 @@ class TestTPUDataUpdateCoordinator:
             ),
         ]
 
-        with (
-            patch("custom_components.mytpu.get_last_statistics", return_value={}),
-            patch(
-                "custom_components.mytpu.async_add_external_statistics"
-            ) as mock_add_stats,
-        ):
+        with patch(
+            "custom_components.mytpu.async_add_external_statistics"
+        ) as mock_add_stats:
             await coordinator._import_statistics(mock_power_service, readings, "energy")
 
             mock_add_stats.assert_called_once()
@@ -479,28 +476,18 @@ class TestTPUDataUpdateCoordinator:
             ),
         ]
 
-        # Mock existing statistics
-        # start is returned as a Unix timestamp (float)
         last_stat_time = dt_util.as_utc(datetime(2026, 1, 2)).timestamp()
-        mock_last_stats = {
-            f"{DOMAIN}:p_mock_power_meter_energy": [
-                {
-                    "sum": 100.0,
-                    "start": last_stat_time,
-                }
-            ]
-        }
 
-        with (
-            patch(
-                "custom_components.mytpu.get_last_statistics",
-                return_value=mock_last_stats,
-            ),
-            patch(
-                "custom_components.mytpu.async_add_external_statistics"
-            ) as mock_add_stats,
-        ):
-            await coordinator._import_statistics(mock_power_service, readings, "energy")
+        with patch(
+            "custom_components.mytpu.async_add_external_statistics"
+        ) as mock_add_stats:
+            await coordinator._import_statistics(
+                mock_power_service,
+                readings,
+                "energy",
+                cumulative_sum=100.0,
+                last_stat_time=last_stat_time,
+            )
 
             mock_add_stats.assert_called_once()
             # Extract arguments: async_add_external_statistics(hass, metadata, statistics)
@@ -534,27 +521,18 @@ class TestTPUDataUpdateCoordinator:
         ]
 
         # Mock that we already have data up to Jan 2
-        # start is returned as a Unix timestamp (float)
         last_stat_time = dt_util.as_utc(datetime(2026, 1, 2)).timestamp()
-        mock_last_stats = {
-            f"{DOMAIN}:p_mock_power_meter_energy": [
-                {
-                    "sum": 100.0,
-                    "start": last_stat_time,
-                }
-            ]
-        }
 
-        with (
-            patch(
-                "custom_components.mytpu.get_last_statistics",
-                return_value=mock_last_stats,
-            ),
-            patch(
-                "custom_components.mytpu.async_add_external_statistics"
-            ) as mock_add_stats,
-        ):
-            await coordinator._import_statistics(mock_power_service, readings, "energy")
+        with patch(
+            "custom_components.mytpu.async_add_external_statistics"
+        ) as mock_add_stats:
+            await coordinator._import_statistics(
+                mock_power_service,
+                readings,
+                "energy",
+                cumulative_sum=100.0,
+                last_stat_time=last_stat_time,
+            )
 
             # Should not add any statistics (all duplicates)
             mock_add_stats.assert_not_called()
@@ -575,12 +553,9 @@ class TestTPUDataUpdateCoordinator:
             ),
         ]
 
-        with (
-            patch("custom_components.mytpu.get_last_statistics", return_value={}),
-            patch(
-                "custom_components.mytpu.async_add_external_statistics"
-            ) as mock_add_stats,
-        ):
+        with patch(
+            "custom_components.mytpu.async_add_external_statistics"
+        ) as mock_add_stats:
             await coordinator._import_statistics(mock_water_service, readings, "water")
 
             mock_add_stats.assert_called_once()
@@ -649,10 +624,10 @@ class TestTPUDataUpdateCoordinator:
         from_date = mock_client.get_usage.call_args_list[0].kwargs["from_date"]
         assert from_date.year == datetime.now(UTC).year - 3
 
-    async def test_import_statistics_force_reimport(
+    async def test_import_statistics_zero_sum_baseline(
         self, hass: HomeAssistant, mock_power_service, make_config_entry
     ):
-        """Test force_reimport skips the DB lookup and starts the sum from zero."""
+        """cumulative_sum=0 (default) adds a baseline entry before the first reading."""
         mock_client = AsyncMock()
         config_entry = make_config_entry()
         coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
@@ -665,17 +640,11 @@ class TestTPUDataUpdateCoordinator:
             )
         ]
 
-        with (
-            patch("custom_components.mytpu.get_last_statistics") as mock_get_stats,
-            patch(
-                "custom_components.mytpu.async_add_external_statistics"
-            ) as mock_add_stats,
-        ):
-            await coordinator._import_statistics(
-                mock_power_service, readings, "energy", force_reimport=True
-            )
+        with patch(
+            "custom_components.mytpu.async_add_external_statistics"
+        ) as mock_add_stats:
+            await coordinator._import_statistics(mock_power_service, readings, "energy")
 
-            mock_get_stats.assert_not_called()
             args = mock_add_stats.call_args.args
             statistics = args[2]
             # baseline (sum=0) + one reading
@@ -767,12 +736,9 @@ class TestTPUDataUpdateCoordinator:
             ),
         ]
 
-        with (
-            patch("custom_components.mytpu.get_last_statistics", return_value={}),
-            patch(
-                "custom_components.mytpu.async_add_external_statistics"
-            ) as mock_add_stats,
-        ):
+        with patch(
+            "custom_components.mytpu.async_add_external_statistics"
+        ) as mock_add_stats:
             await coordinator._import_statistics(service, readings, "energy")
 
             # Extract arguments: async_add_external_statistics(hass, metadata, statistics)

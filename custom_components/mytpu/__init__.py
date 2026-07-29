@@ -175,10 +175,11 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     get_last_statistics, self.hass, 1, power_statistic_id, True, {"sum"}
                 )
                 last_power_stat_time: float | None = None
+                last_power_sum = 0.0
                 if power_statistic_id in last_power_stats:
-                    last_power_stat_time = last_power_stats[power_statistic_id][0].get(
-                        "start"
-                    )
+                    last_power_stat = last_power_stats[power_statistic_id][0]
+                    last_power_stat_time = last_power_stat.get("start")
+                    last_power_sum = float(last_power_stat.get("sum") or 0.0)
 
                 power_needs_migration = self._needs_utc_migration(last_power_stat_time)
                 if power_needs_migration:
@@ -204,7 +205,10 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         self.power_service,
                         power_readings,
                         "energy",
-                        force_reimport=power_needs_migration,
+                        cumulative_sum=0.0 if power_needs_migration else last_power_sum,
+                        last_stat_time=None
+                        if power_needs_migration
+                        else last_power_stat_time,
                     )
                     # Keep latest reading in data for sensor attributes
                     latest = power_readings[-1]
@@ -226,10 +230,11 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     get_last_statistics, self.hass, 1, water_statistic_id, True, {"sum"}
                 )
                 last_water_stat_time: float | None = None
+                last_water_sum = 0.0
                 if water_statistic_id in last_water_stats:
-                    last_water_stat_time = last_water_stats[water_statistic_id][0].get(
-                        "start"
-                    )
+                    last_water_stat = last_water_stats[water_statistic_id][0]
+                    last_water_stat_time = last_water_stat.get("start")
+                    last_water_sum = float(last_water_stat.get("sum") or 0.0)
 
                 water_needs_migration = self._needs_utc_migration(last_water_stat_time)
                 if water_needs_migration:
@@ -255,7 +260,10 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         self.water_service,
                         water_readings,
                         "water",
-                        force_reimport=water_needs_migration,
+                        cumulative_sum=0.0 if water_needs_migration else last_water_sum,
+                        last_stat_time=None
+                        if water_needs_migration
+                        else last_water_stat_time,
                     )
                     # Keep latest reading in data for sensor attributes
                     latest = water_readings[-1]
@@ -343,7 +351,8 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         readings: list,
         stat_type: str,
         *,
-        force_reimport: bool = False,
+        cumulative_sum: float = 0.0,
+        last_stat_time: float | None = None,
     ) -> None:
         """Import historical usage data as statistics."""
         if not readings:
@@ -355,21 +364,6 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "-", "_"
         ).lower()
         statistic_id = f"{DOMAIN}:{meter_id}_{stat_type}"
-
-        # Start cumulative sum from last known value or 0.
-        # Skip the DB lookup when force_reimport is set — async_clear_statistics
-        # was already queued and the cleared data must not seed the sum.
-        cumulative_sum = 0.0
-        last_stat_time: float | None = None
-        if not force_reimport:
-            last_stats = await self.hass.async_add_executor_job(
-                get_last_statistics, self.hass, 1, statistic_id, True, {"sum"}
-            )
-            if statistic_id in last_stats:
-                last_stat = last_stats[statistic_id][0]
-                cumulative_sum = last_stat.get("sum", 0.0)
-                # start is returned as a Unix timestamp (float), not a datetime
-                last_stat_time = last_stat.get("start")
 
         # Create metadata based on type
         if stat_type == "energy":
