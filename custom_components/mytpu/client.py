@@ -43,9 +43,11 @@ class MyTPUClient:
             self._session = None
 
     def _create_session(self) -> aiohttp.ClientSession:
-        return aiohttp.ClientSession(headers={
-            "User-Agent": "hass-mytpu",
-        })
+        return aiohttp.ClientSession(
+            headers={
+                "User-Agent": "hass-mytpu",
+            }
+        )
 
     async def _ensure_session(self) -> aiohttp.ClientSession:
         """Ensure we have an active session."""

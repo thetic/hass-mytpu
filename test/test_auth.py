@@ -124,7 +124,6 @@ class TestMyTPUAuth:
         """Test initialization."""
         auth = MyTPUAuth()
         assert auth._token is None
-        assert auth._oauth_basic_token is None
 
     @freeze_time("2026-01-17 12:00:00")
     def test_init_with_token_data(self):
@@ -180,109 +179,9 @@ class TestMyTPUAuth:
         auth = MyTPUAuth()
         assert auth.customer_id is None
 
-    async def test_get_oauth_basic_token_success(self):
-        """Test successful extraction of OAuth basic token."""
-        html = '<script src="main.abc123def456.js"></script>'
-        js = 'headers: {"Authorization": "Basic dGVzdDp0ZXN0"}'
-
-        auth = MyTPUAuth()
-        async with aiohttp.ClientSession() as session:
-            with aioresponses() as m:
-                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
-                m.get(f"{BASE_URL}/eportal/main.abc123def456.js", status=200, body=js)
-
-                token = await auth._get_oauth_basic_token(session)
-                assert token == "dGVzdDp0ZXN0"
-
-    async def test_get_oauth_basic_token_alternative_pattern(self):
-        """Test extraction with alternative JS pattern."""
-        html = '<head><script src="main.fed789abc123.js"></script></head>'
-        js = 'Authorization:"Basic YWx0ZXJuYXRpdmU="'
-
-        auth = MyTPUAuth()
-        async with aiohttp.ClientSession() as session:
-            with aioresponses() as m:
-                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
-                m.get(f"{BASE_URL}/eportal/main.fed789abc123.js", status=200, body=js)
-
-                token = await auth._get_oauth_basic_token(session)
-                assert token == "YWx0ZXJuYXRpdmU="
-
-    async def test_get_oauth_basic_token_caching(self):
-        """Test that Basic token is cached after first fetch."""
-        html = '<script src="main.abc123.js"></script>'
-        js = 'Authorization:"Basic dGVzdA=="'
-
-        auth = MyTPUAuth()
-        async with aiohttp.ClientSession() as session:
-            with aioresponses() as m:
-                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
-                m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
-
-                token1 = await auth._get_oauth_basic_token(session)
-                assert token1 == "dGVzdA=="
-
-                # Second call should use cached value without making requests
-                token2 = await auth._get_oauth_basic_token(session)
-                assert token2 == "dGVzdA=="
-
-    async def test_get_oauth_basic_token_no_main_js(self):
-        """Test error when main.js not found in HTML."""
-        html = '<script src="other.js"></script>'
-
-        auth = MyTPUAuth()
-        async with aiohttp.ClientSession() as session:
-            with aioresponses() as m:
-                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
-
-                with pytest.raises(AuthError, match="Could not find main.js"):
-                    await auth._get_oauth_basic_token(session)
-
-    async def test_get_oauth_basic_token_login_page_error(self):
-        """Test error when login page fetch fails."""
-        auth = MyTPUAuth()
-        async with aiohttp.ClientSession() as session:
-            with aioresponses() as m:
-                m.get(f"{BASE_URL}/eportal/", status=500)
-
-                with pytest.raises(AuthError, match="Failed to fetch login page"):
-                    await auth._get_oauth_basic_token(session)
-
-    async def test_get_oauth_basic_token_js_fetch_error(self):
-        """Test error when JS bundle fetch fails."""
-        html = '<script src="main.abc123.js"></script>'
-
-        auth = MyTPUAuth()
-        async with aiohttp.ClientSession() as session:
-            with aioresponses() as m:
-                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
-                m.get(f"{BASE_URL}/eportal/main.abc123.js", status=404)
-
-                with pytest.raises(AuthError, match="Failed to fetch main.abc123.js"):
-                    await auth._get_oauth_basic_token(session)
-
-    async def test_get_oauth_basic_token_no_token_in_js(self):
-        """Test error when Basic token not found in JS."""
-        html = '<script src="main.abc123.js"></script>'
-        js = "var config = { headers: {} };"
-
-        auth = MyTPUAuth()
-        async with aiohttp.ClientSession() as session:
-            with aioresponses() as m:
-                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
-                m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
-
-                with pytest.raises(
-                    AuthError, match="Could not find Basic auth token in main.abc123.js"
-                ):
-                    await auth._get_oauth_basic_token(session)
-
     @freeze_time("2026-01-17 12:00:00")
     async def test_refresh_token_success(self):
         """Test successful token refresh."""
-        html = '<script src="main.abc123.js"></script>'
-        js = 'Authorization:"Basic dGVzdDp0ZXN0"'
-
         refresh_response = {
             "access_token": "new_access_token",
             "refresh_token": "new_refresh_token",
@@ -301,8 +200,6 @@ class TestMyTPUAuth:
 
         async with aiohttp.ClientSession() as session:
             with aioresponses() as m:
-                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
-                m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
                 m.post(
                     f"{BASE_URL}/rest/oauth/token",
                     status=200,
@@ -340,9 +237,6 @@ class TestMyTPUAuth:
     @freeze_time("2026-01-17 12:00:00")
     async def test_refresh_token_api_error(self):
         """Test refresh token handles API errors (4xx)."""
-        html = '<script src="main.abc123.js"></script>'
-        js = 'Authorization:"Basic dGVzdDp0ZXN0"'
-
         auth = MyTPUAuth()
         auth._token = TokenInfo(
             access_token="old_access",
@@ -353,8 +247,6 @@ class TestMyTPUAuth:
 
         async with aiohttp.ClientSession() as session:
             with aioresponses() as m:
-                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
-                m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
                 m.post(
                     f"{BASE_URL}/rest/oauth/token",
                     status=400,
@@ -367,10 +259,6 @@ class TestMyTPUAuth:
     @freeze_time("2026-01-17 12:00:00")
     async def test_refresh_token_server_error(self):
         """Test refresh token handles server errors (5xx)."""
-
-        html = '<script src="main.abc123.js"></script>'
-        js = 'Authorization:"Basic dGVzdDp0ZXN0"'
-
         auth = MyTPUAuth()
         auth._token = TokenInfo(
             access_token="old_access",
@@ -381,8 +269,6 @@ class TestMyTPUAuth:
 
         async with aiohttp.ClientSession() as session:
             with aioresponses() as m:
-                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
-                m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
                 m.post(
                     f"{BASE_URL}/rest/oauth/token",
                     status=500,
@@ -406,9 +292,6 @@ class TestMyTPUAuth:
     @freeze_time("2026-01-17 12:00:00")
     async def test_get_token_when_expired_refresh_success(self):
         """Test get_token refreshes token when expired."""
-        html = '<script src="main.abc123.js"></script>'
-        js = 'Authorization:"Basic dGVzdDp0ZXN0"'
-
         refresh_response = {
             "access_token": "refreshed_access_token",
             "refresh_token": "refreshed_refresh_token",
@@ -427,8 +310,6 @@ class TestMyTPUAuth:
 
         async with aiohttp.ClientSession() as session:
             with aioresponses() as m:
-                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
-                m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
                 # Only one call to token endpoint (refresh, not full auth)
                 m.post(
                     f"{BASE_URL}/rest/oauth/token",
@@ -444,9 +325,6 @@ class TestMyTPUAuth:
     @freeze_time("2026-01-17 12:00:00")
     async def test_get_token_when_expired_refresh_fails(self):
         """Test get_token raises AuthError when refresh fails."""
-        html = '<script src="main.abc123.js"></script>'
-        js = 'Authorization:"Basic dGVzdDp0ZXN0"'
-
         auth = MyTPUAuth()
         # Set an expired token
         auth._token = TokenInfo(
@@ -458,8 +336,6 @@ class TestMyTPUAuth:
 
         async with aiohttp.ClientSession() as session:
             with aioresponses() as m:
-                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
-                m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
                 # First call (refresh) fails
                 m.post(
                     f"{BASE_URL}/rest/oauth/token",
@@ -473,10 +349,6 @@ class TestMyTPUAuth:
     @freeze_time("2026-01-17 12:00:00")
     async def test_get_token_when_expired_refresh_server_error(self):
         """Test get_token propagates ServerError when refresh encounters server error."""
-
-        html = '<script src="main.abc123.js"></script>'
-        js = 'Authorization:"Basic dGVzdDp0ZXN0"'
-
         auth = MyTPUAuth()
         # Set an expired token
         auth._token = TokenInfo(
@@ -488,8 +360,6 @@ class TestMyTPUAuth:
 
         async with aiohttp.ClientSession() as session:
             with aioresponses() as m:
-                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
-                m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
                 # Refresh encounters server error
                 m.post(
                     f"{BASE_URL}/rest/oauth/token",
@@ -540,16 +410,9 @@ class TestMyTPUAuth:
 
     async def test_get_auth_header(self, mock_token_response):
         """Test get_auth_header returns proper header."""
-        html = '<script src="main.abc123.js"></script>'
-        js = 'Authorization:"Basic dGVzdDp0ZXN0"'
-
         auth = MyTPUAuth()
         async with aiohttp.ClientSession() as session:
             with aioresponses() as m:
-                # Mocks for _get_oauth_basic_token during async_login
-                m.get(f"{BASE_URL}/eportal/", status=200, body=html)
-                m.get(f"{BASE_URL}/eportal/main.abc123.js", status=200, body=js)
-                # Mocks for token exchange during async_login
                 m.post(
                     f"{BASE_URL}/rest/oauth/token",
                     status=200,

@@ -66,7 +66,7 @@ class ServerError(Exception):
 class MyTPUAuth:
     """Handles OAuth2 authentication with MyTPU."""
 
-    _oauth_basic_token: str = b64encode("webClientIdPassword:secret".encode("utf8")).decode("utf-8")
+    _oauth_basic_token: str = b64encode(b"webClientIdPassword:secret").decode("utf-8")
 
     def __init__(self, token_data: dict | None = None):
         """Initialize auth handler.
