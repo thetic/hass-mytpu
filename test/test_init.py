@@ -622,7 +622,7 @@ class TestTPUDataUpdateCoordinator:
 
         assert mock_recorder.async_clear_statistics.call_count == 2
         from_date = mock_client.get_usage.call_args_list[0].kwargs["from_date"]
-        assert from_date.year == datetime.now(UTC).year - 3
+        assert (datetime.now(UTC) - from_date).days <= 90
 
     async def test_import_statistics_zero_sum_baseline(
         self, hass: HomeAssistant, mock_power_service, make_config_entry
@@ -682,10 +682,10 @@ class TestTPUDataUpdateCoordinator:
         power_from_date = mock_client.get_usage.call_args_list[0].kwargs["from_date"]
         assert power_from_date.day == 16
 
-    async def test_async_update_data_no_stats_fetches_three_years(
+    async def test_async_update_data_no_stats_fetches_90_days(
         self, hass: HomeAssistant, mock_config_entry
     ):
-        """No existing statistics (fresh install or post-migration clear) fetches 3 years back."""
+        """No existing statistics (fresh install or post-migration clear) fetches 90 days back."""
         mock_client = AsyncMock()
         mock_client.get_account_info = AsyncMock()
         mock_client.get_token_data = MagicMock(return_value=None)
@@ -701,7 +701,7 @@ class TestTPUDataUpdateCoordinator:
 
         assert mock_client.get_usage.call_count == 2
         from_date = mock_client.get_usage.call_args_list[0].kwargs["from_date"]
-        assert from_date.year == datetime.now(UTC).year - 3
+        assert (datetime.now(UTC) - from_date).days <= 90
         assert from_date.tzinfo is not None
 
     async def test_import_statistics_empty_readings(

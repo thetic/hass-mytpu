@@ -186,9 +186,7 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     _LOGGER.info("Migrating power statistics to local-time timestamps")
                     get_instance(self.hass).async_clear_statistics([power_statistic_id])
                 if power_needs_migration or not last_power_stat_time:
-                    power_from_date = datetime(
-                        datetime.now(UTC).year - 3, 1, 1, tzinfo=UTC
-                    )
+                    power_from_date = datetime.now(UTC) - timedelta(days=90)
                 else:
                     power_from_date = datetime.fromtimestamp(
                         last_power_stat_time, tz=UTC
@@ -241,9 +239,7 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     _LOGGER.info("Migrating water statistics to local-time timestamps")
                     get_instance(self.hass).async_clear_statistics([water_statistic_id])
                 if water_needs_migration or not last_water_stat_time:
-                    water_from_date = datetime(
-                        datetime.now(UTC).year - 3, 1, 1, tzinfo=UTC
-                    )
+                    water_from_date = datetime.now(UTC) - timedelta(days=90)
                 else:
                     water_from_date = datetime.fromtimestamp(
                         last_water_stat_time, tz=UTC
