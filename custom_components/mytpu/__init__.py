@@ -260,6 +260,8 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise  # propagates to _async_update_data for re-login handling
         except MyTPUError as err:
             raise UpdateFailed(f"API request failed: {err}") from err
+        except TimeoutError as err:
+            raise UpdateFailed("Request to MyTPU timed out") from err
         except Exception as err:
             _LOGGER.exception("Unexpected error communicating with TPU")
             raise UpdateFailed(
