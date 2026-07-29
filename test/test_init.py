@@ -258,6 +258,18 @@ class TestTPUDataUpdateCoordinator:
         with pytest.raises(UpdateFailed, match="API request failed"):
             await coordinator._async_update_data()
 
+    async def test_async_update_data_timeout(
+        self, hass: HomeAssistant, make_config_entry
+    ):
+        """Test data update with request timeout raises UpdateFailed."""
+        mock_client = AsyncMock()
+        mock_client.get_account_info = AsyncMock(side_effect=TimeoutError)
+        config_entry = make_config_entry(include_power=True)
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, config_entry)
+
+        with pytest.raises(UpdateFailed, match="timed out"):
+            await coordinator._async_update_data()
+
     async def test_async_update_data_server_error_no_credentials(
         self, hass: HomeAssistant, make_config_entry
     ):
