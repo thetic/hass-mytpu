@@ -505,6 +505,53 @@ class TestTPUConfigFlow:
             assert result["step_id"] == "meters"
             assert result["errors"] == {"base": "no_meters"}
 
+    async def test_meters_step_entry_title_not_in_data(
+        self, hass: HomeAssistant, mock_credentials, mock_token_data, mock_power_service
+    ):
+        """Test that the config entry title comes from _title, not _data.
+
+        Previously, title was stored in _data and popped at create time, which
+        raised KeyError if async_step_meters was reached via a code path that
+        didn't set it. Now _title is a separate instance variable.
+        """
+        expected_title = "TPU - Test User"
+        with patch(
+            "custom_components.mytpu.config_flow.validate_and_fetch_services"
+        ) as mock_validate:
+            mock_validate.return_value = ValidationResult(
+                title=expected_title,
+                services=[mock_power_service],
+                token_data=mock_token_data,
+            )
+
+            result = await hass.config_entries.flow.async_init(
+                DOMAIN, context={"source": config_entries.SOURCE_USER}
+            )
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"], mock_credentials
+            )
+
+            power_json = json.dumps(
+                {
+                    "service_id": mock_power_service.service_id,
+                    "service_number": mock_power_service.service_number,
+                    "meter_number": mock_power_service.meter_number,
+                    "display_meter_number": mock_power_service.display_meter_number,
+                    "service_type": mock_power_service.service_type.value,
+                    "latitude": mock_power_service.latitude,
+                    "longitude": mock_power_service.longitude,
+                    "contract_number": mock_power_service.contract_number,
+                    "totalizer": mock_power_service.totalizer,
+                }
+            )
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"], {CONF_POWER_SERVICE: power_json}
+            )
+
+            assert result["type"] == FlowResultType.CREATE_ENTRY
+            assert result["title"] == expected_title
+            assert "title" not in result["data"]
+
     async def test_reauth_confirm_success(
         self, hass: HomeAssistant, mock_credentials, mock_account_info, mock_token_data
     ):
