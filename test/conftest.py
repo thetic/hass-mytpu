@@ -3,9 +3,11 @@
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock
+from zoneinfo import ZoneInfo
 
 import pytest
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.mytpu.auth import MyTPUAuth
@@ -20,6 +22,15 @@ from custom_components.mytpu.models import Service, ServiceType
 
 # This fixture is required for all tests
 pytest_plugins = "pytest_homeassistant_custom_component"
+
+
+@pytest.fixture(autouse=True)
+def pacific_timezone():
+    """Set HA timezone to America/Los_Angeles for the test, then restore."""
+    previous = dt_util.DEFAULT_TIME_ZONE
+    dt_util.set_default_time_zone(ZoneInfo("America/Los_Angeles"))
+    yield
+    dt_util.set_default_time_zone(previous)
 
 
 # Custom component fixtures
