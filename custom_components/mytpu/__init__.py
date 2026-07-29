@@ -19,6 +19,7 @@ from homeassistant.components.recorder.models import (
 from homeassistant.components.recorder.statistics import (
     async_add_external_statistics,
     get_last_statistics,
+    statistics_during_period,
 )
 from homeassistant.components.recorder.util import get_instance
 from homeassistant.const import (
@@ -181,19 +182,22 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     last_power_stat_time = last_power_stat.get("start")
                     last_power_sum = float(last_power_stat.get("sum") or 0.0)
 
-                power_needs_migration = self._needs_utc_migration(last_power_stat_time)
-                if power_needs_migration:
+                if self._needs_utc_migration(last_power_stat_time):
                     _LOGGER.info("Migrating power statistics to local-time timestamps")
-                    get_instance(self.hass).async_clear_statistics([power_statistic_id])
-                if power_needs_migration or not last_power_stat_time:
-                    power_from_date = datetime.now(UTC) - timedelta(days=90)
-                else:
-                    power_from_date = datetime.fromtimestamp(
-                        last_power_stat_time, tz=UTC
-                    ) + timedelta(days=1)
-                    power_from_date = power_from_date.replace(
-                        hour=0, minute=0, second=0, microsecond=0
+                    (
+                        last_power_sum,
+                        last_power_stat_time,
+                    ) = await self._migrate_statistics(
+                        power_statistic_id, self.power_service, "energy"
                     )
+
+                if last_power_stat_time:
+                    power_from_date = (
+                        datetime.fromtimestamp(last_power_stat_time, tz=UTC)
+                        + timedelta(days=1)
+                    ).replace(hour=0, minute=0, second=0, microsecond=0)
+                else:
+                    power_from_date = datetime.now(UTC) - timedelta(days=90)
 
                 power_readings = await self.client.get_usage(
                     self.power_service, from_date=power_from_date
@@ -203,10 +207,8 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         self.power_service,
                         power_readings,
                         "energy",
-                        cumulative_sum=0.0 if power_needs_migration else last_power_sum,
-                        last_stat_time=None
-                        if power_needs_migration
-                        else last_power_stat_time,
+                        cumulative_sum=last_power_sum,
+                        last_stat_time=last_power_stat_time,
                     )
                     # Keep latest reading in data for sensor attributes
                     latest = power_readings[-1]
@@ -234,19 +236,22 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     last_water_stat_time = last_water_stat.get("start")
                     last_water_sum = float(last_water_stat.get("sum") or 0.0)
 
-                water_needs_migration = self._needs_utc_migration(last_water_stat_time)
-                if water_needs_migration:
+                if self._needs_utc_migration(last_water_stat_time):
                     _LOGGER.info("Migrating water statistics to local-time timestamps")
-                    get_instance(self.hass).async_clear_statistics([water_statistic_id])
-                if water_needs_migration or not last_water_stat_time:
-                    water_from_date = datetime.now(UTC) - timedelta(days=90)
-                else:
-                    water_from_date = datetime.fromtimestamp(
-                        last_water_stat_time, tz=UTC
-                    ) + timedelta(days=1)
-                    water_from_date = water_from_date.replace(
-                        hour=0, minute=0, second=0, microsecond=0
+                    (
+                        last_water_sum,
+                        last_water_stat_time,
+                    ) = await self._migrate_statistics(
+                        water_statistic_id, self.water_service, "water"
                     )
+
+                if last_water_stat_time:
+                    water_from_date = (
+                        datetime.fromtimestamp(last_water_stat_time, tz=UTC)
+                        + timedelta(days=1)
+                    ).replace(hour=0, minute=0, second=0, microsecond=0)
+                else:
+                    water_from_date = datetime.now(UTC) - timedelta(days=90)
 
                 water_readings = await self.client.get_usage(
                     self.water_service, from_date=water_from_date
@@ -256,10 +261,8 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         self.water_service,
                         water_readings,
                         "water",
-                        cumulative_sum=0.0 if water_needs_migration else last_water_sum,
-                        last_stat_time=None
-                        if water_needs_migration
-                        else last_water_stat_time,
+                        cumulative_sum=last_water_sum,
+                        last_stat_time=last_water_stat_time,
                     )
                     # Keep latest reading in data for sensor attributes
                     latest = water_readings[-1]
@@ -340,6 +343,75 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             and last_utc.hour == 0
             and last_utc.minute == 0
         )
+
+    async def _migrate_statistics(
+        self,
+        statistic_id: str,
+        service: Service,
+        stat_type: str,
+    ) -> tuple[float, float | None]:
+        """Re-timestamp existing statistics from UTC midnight to local-midnight UTC.
+
+        Returns (last_cumulative_sum, last_stat_time) so the caller can compute
+        an incremental from_date without re-querying TPU for historical data.
+        """
+        all_stats = await self.hass.async_add_executor_job(
+            statistics_during_period,
+            self.hass,
+            datetime(1970, 1, 1, tzinfo=UTC),
+            None,
+            {statistic_id},
+            "hour",
+            None,
+            {"state", "sum"},
+        )
+        existing = all_stats.get(statistic_id, [])
+        if not existing:
+            return 0.0, None
+
+        corrected = [
+            StatisticData(
+                start=dt_util.as_utc(
+                    datetime(
+                        (old_utc := datetime.fromtimestamp(stat["start"], tz=UTC)).year,
+                        old_utc.month,
+                        old_utc.day,
+                        tzinfo=dt_util.DEFAULT_TIME_ZONE,
+                    )
+                ),
+                state=float(stat.get("state") or 0.0),
+                sum=float(stat.get("sum") or 0.0),
+            )
+            for stat in existing
+        ]
+
+        get_instance(self.hass).async_clear_statistics([statistic_id])
+
+        if stat_type == "energy":
+            metadata = StatisticMetaData(
+                mean_type=StatisticMeanType.NONE,
+                has_sum=True,
+                name=f"TPU Energy {service.display_meter_number}",
+                source=DOMAIN,
+                statistic_id=statistic_id,
+                unit_class="energy",
+                unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+            )
+        else:
+            metadata = StatisticMetaData(
+                mean_type=StatisticMeanType.NONE,
+                has_sum=True,
+                name=f"TPU Water {service.display_meter_number}",
+                source=DOMAIN,
+                statistic_id=statistic_id,
+                unit_class="volume",
+                unit_of_measurement=UnitOfVolume.CENTUM_CUBIC_FEET,
+            )
+
+        async_add_external_statistics(self.hass, metadata, corrected)
+
+        last = corrected[-1]
+        return float(last["sum"] or 0.0), last["start"].timestamp()
 
     async def _import_statistics(
         self,

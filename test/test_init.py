@@ -570,6 +570,18 @@ class TestTPUDataUpdateCoordinator:
             assert "TPU Water" in metadata["name"]
             assert metadata["unit_class"] == "volume"
 
+    async def test_migrate_statistics_empty(
+        self, hass: HomeAssistant, mock_power_service, make_config_entry
+    ):
+        """_migrate_statistics returns zeros when statistics_during_period finds nothing."""
+        coordinator = TPUDataUpdateCoordinator(hass, AsyncMock(), make_config_entry())
+        with patch("custom_components.mytpu.statistics_during_period", return_value={}):
+            result_sum, result_time = await coordinator._migrate_statistics(
+                f"{DOMAIN}:p_mock_power_meter_energy", mock_power_service, "energy"
+            )
+        assert result_sum == 0.0
+        assert result_time is None
+
     def test_needs_utc_migration_none(self):
         """No existing statistics never triggers migration."""
         assert TPUDataUpdateCoordinator._needs_utc_migration(None) is False
@@ -595,7 +607,7 @@ class TestTPUDataUpdateCoordinator:
     async def test_async_update_data_migration(
         self, hass: HomeAssistant, mock_config_entry
     ):
-        """Old UTC-midnight statistics are cleared and re-fetched from 3 years back."""
+        """Old UTC-midnight statistics are re-timestamped in place; TPU is only queried for new data."""
         mock_client = AsyncMock()
         mock_client.get_account_info = AsyncMock()
         mock_client.get_token_data = MagicMock(return_value=None)
@@ -605,8 +617,15 @@ class TestTPUDataUpdateCoordinator:
 
         power_statistic_id = f"{DOMAIN}:p_mock_power_meter_energy"
         water_statistic_id = f"{DOMAIN}:w_mock_water_meter_water"
+        # Old-format: stored at UTC midnight (PST would be 08:00 UTC)
         old_stat_time = datetime(2025, 1, 14, 0, 0, tzinfo=UTC).timestamp()
         mock_recorder = MagicMock()
+
+        existing_stats = {
+            "sum": 100.0,
+            "start": old_stat_time,
+            "state": 25.5,
+        }
 
         with (
             patch(
@@ -616,13 +635,30 @@ class TestTPUDataUpdateCoordinator:
                     water_statistic_id: [{"sum": 10.0, "start": old_stat_time}],
                 },
             ),
+            patch(
+                "custom_components.mytpu.statistics_during_period",
+                return_value={
+                    power_statistic_id: [existing_stats],
+                    water_statistic_id: [existing_stats],
+                },
+            ),
             patch("custom_components.mytpu.get_instance", return_value=mock_recorder),
+            patch(
+                "custom_components.mytpu.async_add_external_statistics"
+            ) as mock_add_stats,
         ):
             await coordinator._async_update_data()
 
+        # Stats cleared and re-inserted with corrected timestamps
         assert mock_recorder.async_clear_statistics.call_count == 2
+        assert mock_add_stats.call_count == 2
+        corrected_start = mock_add_stats.call_args_list[0].args[2][0]["start"]
+        # 2025-01-14 UTC midnight → 2025-01-14 08:00 UTC (PST = UTC-8)
+        assert corrected_start == datetime(2025, 1, 14, 8, 0, tzinfo=UTC)
+
+        # TPU is queried only for new data: the day after the last corrected stat
         from_date = mock_client.get_usage.call_args_list[0].kwargs["from_date"]
-        assert (datetime.now(UTC) - from_date).days <= 90
+        assert from_date == datetime(2025, 1, 15, 0, 0, tzinfo=UTC)
 
     async def test_import_statistics_zero_sum_baseline(
         self, hass: HomeAssistant, mock_power_service, make_config_entry
