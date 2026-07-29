@@ -713,6 +713,28 @@ class TestTPUDataUpdateCoordinator:
         power_from_date = mock_client.get_usage.call_args_list[0].kwargs["from_date"]
         assert power_from_date.day == 16
 
+    async def test_async_update_data_no_stats_fetches_three_years(
+        self, hass: HomeAssistant, mock_config_entry
+    ):
+        """No existing statistics (fresh install or post-migration clear) fetches 3 years back."""
+        mock_client = AsyncMock()
+        mock_client.get_account_info = AsyncMock()
+        mock_client.get_token_data = MagicMock(return_value=None)
+        mock_client.get_usage = AsyncMock(return_value=[])
+
+        coordinator = TPUDataUpdateCoordinator(hass, mock_client, mock_config_entry)
+
+        with patch(
+            "custom_components.mytpu.get_last_statistics",
+            return_value={},
+        ):
+            await coordinator._async_update_data()
+
+        assert mock_client.get_usage.call_count == 2
+        from_date = mock_client.get_usage.call_args_list[0].kwargs["from_date"]
+        assert from_date.year == datetime.now(UTC).year - 3
+        assert from_date.tzinfo is not None
+
     async def test_import_statistics_empty_readings(
         self, hass: HomeAssistant, mock_power_service, make_config_entry
     ):

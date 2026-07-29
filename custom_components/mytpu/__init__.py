@@ -180,15 +180,17 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         "start"
                     )
 
-                power_from_date: datetime | None = None
                 power_needs_migration = self._needs_utc_migration(last_power_stat_time)
                 if power_needs_migration:
                     _LOGGER.info("Migrating power statistics to local-time timestamps")
                     get_instance(self.hass).async_clear_statistics([power_statistic_id])
-                    power_from_date = datetime(datetime.now(UTC).year - 3, 1, 1)
-                elif last_power_stat_time:
+                if power_needs_migration or not last_power_stat_time:
+                    power_from_date = datetime(
+                        datetime.now(UTC).year - 3, 1, 1, tzinfo=UTC
+                    )
+                else:
                     power_from_date = datetime.fromtimestamp(
-                        last_power_stat_time
+                        last_power_stat_time, tz=UTC
                     ) + timedelta(days=1)
                     power_from_date = power_from_date.replace(
                         hour=0, minute=0, second=0, microsecond=0
@@ -229,15 +231,17 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         "start"
                     )
 
-                water_from_date: datetime | None = None
                 water_needs_migration = self._needs_utc_migration(last_water_stat_time)
                 if water_needs_migration:
                     _LOGGER.info("Migrating water statistics to local-time timestamps")
                     get_instance(self.hass).async_clear_statistics([water_statistic_id])
-                    water_from_date = datetime(datetime.now(UTC).year - 3, 1, 1)
-                elif last_water_stat_time:
+                if water_needs_migration or not last_water_stat_time:
+                    water_from_date = datetime(
+                        datetime.now(UTC).year - 3, 1, 1, tzinfo=UTC
+                    )
+                else:
                     water_from_date = datetime.fromtimestamp(
-                        last_water_stat_time
+                        last_water_stat_time, tz=UTC
                     ) + timedelta(days=1)
                     water_from_date = water_from_date.replace(
                         hour=0, minute=0, second=0, microsecond=0
