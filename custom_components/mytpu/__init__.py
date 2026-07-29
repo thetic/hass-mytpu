@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -20,6 +20,7 @@ from homeassistant.components.recorder.statistics import (
     async_add_external_statistics,
     get_last_statistics,
 )
+from homeassistant.components.recorder.util import get_instance
 from homeassistant.const import (
     CONF_PASSWORD,
     CONF_USERNAME,
@@ -29,6 +30,7 @@ from homeassistant.const import (
 )
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .auth import AuthError, MyTPUAuth, ServerError
 from .client import MyTPUClient, MyTPUError
@@ -179,13 +181,15 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     )
 
                 power_from_date: datetime | None = None
-                if last_power_stat_time:
-                    # Request data starting from the day after the last recorded statistic
-                    # Convert the Unix timestamp (float) back to a datetime object
+                power_needs_migration = self._needs_utc_migration(last_power_stat_time)
+                if power_needs_migration:
+                    _LOGGER.info("Migrating power statistics to local-time timestamps")
+                    get_instance(self.hass).async_clear_statistics([power_statistic_id])
+                    power_from_date = datetime(datetime.now(UTC).year - 3, 1, 1)
+                elif last_power_stat_time:
                     power_from_date = datetime.fromtimestamp(
                         last_power_stat_time
                     ) + timedelta(days=1)
-                    # Set time to midnight UTC for consistency with how usageDate is parsed in models.py
                     power_from_date = power_from_date.replace(
                         hour=0, minute=0, second=0, microsecond=0
                     )
@@ -195,7 +199,10 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
                 if power_readings:
                     await self._import_statistics(
-                        self.power_service, power_readings, "energy"
+                        self.power_service,
+                        power_readings,
+                        "energy",
+                        force_reimport=power_needs_migration,
                     )
                     # Keep latest reading in data for sensor attributes
                     latest = power_readings[-1]
@@ -223,13 +230,15 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     )
 
                 water_from_date: datetime | None = None
-                if last_water_stat_time:
-                    # Request data starting from the day after the last recorded statistic
-                    # Convert the Unix timestamp (float) back to a datetime object
+                water_needs_migration = self._needs_utc_migration(last_water_stat_time)
+                if water_needs_migration:
+                    _LOGGER.info("Migrating water statistics to local-time timestamps")
+                    get_instance(self.hass).async_clear_statistics([water_statistic_id])
+                    water_from_date = datetime(datetime.now(UTC).year - 3, 1, 1)
+                elif last_water_stat_time:
                     water_from_date = datetime.fromtimestamp(
                         last_water_stat_time
                     ) + timedelta(days=1)
-                    # Set time to midnight UTC for consistency with how usageDate is parsed in models.py
                     water_from_date = water_from_date.replace(
                         hour=0, minute=0, second=0, microsecond=0
                     )
@@ -239,7 +248,10 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
                 if water_readings:
                     await self._import_statistics(
-                        self.water_service, water_readings, "water"
+                        self.water_service,
+                        water_readings,
+                        "water",
+                        force_reimport=water_needs_migration,
                     )
                     # Keep latest reading in data for sensor attributes
                     latest = water_readings[-1]
@@ -301,8 +313,33 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         else:
             _LOGGER.debug("Token data unchanged, no save needed")
 
+    @staticmethod
+    def _needs_utc_migration(last_stat_time: float | None) -> bool:
+        """Return True if the last statistic used the old UTC-midnight format.
+
+        Old code stored every reading at 00:00 UTC. New code stores at local
+        midnight converted to UTC (e.g. 08:00 UTC for PST). If the last
+        recorded statistic is at exactly 00:00 UTC and the local timezone has
+        a non-zero UTC offset, the data was written by the old code.
+        """
+        if last_stat_time is None:
+            return False
+        last_utc = datetime.fromtimestamp(last_stat_time, tz=UTC)
+        local_offset = last_utc.astimezone(dt_util.DEFAULT_TIME_ZONE).utcoffset()
+        return (
+            local_offset is not None
+            and local_offset != timedelta(0)
+            and last_utc.hour == 0
+            and last_utc.minute == 0
+        )
+
     async def _import_statistics(
-        self, service: Service, readings: list, stat_type: str
+        self,
+        service: Service,
+        readings: list,
+        stat_type: str,
+        *,
+        force_reimport: bool = False,
     ) -> None:
         """Import historical usage data as statistics."""
         if not readings:
@@ -315,19 +352,20 @@ class TPUDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         ).lower()
         statistic_id = f"{DOMAIN}:{meter_id}_{stat_type}"
 
-        # Get the last imported statistic to avoid duplicates and calculate cumulative sum
-        last_stats = await self.hass.async_add_executor_job(
-            get_last_statistics, self.hass, 1, statistic_id, True, {"sum"}
-        )
-
-        # Start cumulative sum from last known value or 0
+        # Start cumulative sum from last known value or 0.
+        # Skip the DB lookup when force_reimport is set — async_clear_statistics
+        # was already queued and the cleared data must not seed the sum.
         cumulative_sum = 0.0
         last_stat_time: float | None = None
-        if statistic_id in last_stats:
-            last_stat = last_stats[statistic_id][0]
-            cumulative_sum = last_stat.get("sum", 0.0)
-            # start is returned as a Unix timestamp (float), not a datetime
-            last_stat_time = last_stat.get("start")
+        if not force_reimport:
+            last_stats = await self.hass.async_add_executor_job(
+                get_last_statistics, self.hass, 1, statistic_id, True, {"sum"}
+            )
+            if statistic_id in last_stats:
+                last_stat = last_stats[statistic_id][0]
+                cumulative_sum = last_stat.get("sum", 0.0)
+                # start is returned as a Unix timestamp (float), not a datetime
+                last_stat_time = last_stat.get("start")
 
         # Create metadata based on type
         if stat_type == "energy":
