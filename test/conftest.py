@@ -33,6 +33,15 @@ def pacific_timezone():
     dt_util.set_default_time_zone(previous)
 
 
+@pytest.fixture()
+def utc_timezone():
+    """Temporarily override the HA timezone to UTC for a single test."""
+    previous = dt_util.DEFAULT_TIME_ZONE
+    dt_util.set_default_time_zone(ZoneInfo("UTC"))
+    yield
+    dt_util.set_default_time_zone(previous)
+
+
 # Custom component fixtures
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations):
