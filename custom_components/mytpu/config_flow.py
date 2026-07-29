@@ -98,6 +98,7 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         """Initialize the config flow."""
+        self._title: str = ""
         self._data: dict[str, Any] = {}
         self._services: list[Service] = []
 
@@ -115,8 +116,8 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(validation_result.title)
                 self._abort_if_unique_id_configured()
 
+                self._title = validation_result.title
                 self._data = {
-                    "title": validation_result.title,
                     CONF_USERNAME: user_input[CONF_USERNAME],
                     CONF_PASSWORD: user_input[CONF_PASSWORD],
                     CONF_TOKEN_DATA: validation_result.token_data,
@@ -161,7 +162,7 @@ class TPUConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
 
             return self.async_create_entry(
-                title=self._data.pop("title"),
+                title=self._title,
                 data=self._data,
             )
 
