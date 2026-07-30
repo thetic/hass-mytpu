@@ -34,12 +34,13 @@ class UsageReading:
             with contextlib.suppress(ValueError, TypeError):
                 peak_time = datetime.strptime(data["demandPeakTime"], "%Y-%m-%d %H:%M")
 
-        # Parse date as UTC midnight using dt_util.parse_datetime
-        # Append time and Z to indicate UTC
-        utc_date_str = f"{data['usageDate']}T00:00:00Z"
-        utc_date = dt_util.parse_datetime(utc_date_str)
-        if utc_date is None:
-            raise ValueError(f"Failed to parse date: {data['usageDate']}")
+        # Parse usageDate as midnight in HA's local timezone, then convert to UTC.
+        # The API returns local (Pacific) calendar dates; storing as UTC midnight
+        # would cause the Energy Dashboard to display readings shifted by UTC offset.
+        local_midnight = datetime.strptime(data["usageDate"], "%Y-%m-%d").replace(
+            tzinfo=dt_util.DEFAULT_TIME_ZONE
+        )
+        utc_date = dt_util.as_utc(local_midnight)
 
         return cls(
             date=utc_date,

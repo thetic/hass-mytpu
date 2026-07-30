@@ -258,10 +258,10 @@ class TestMyTPUClient:
                     )
 
                     assert len(readings) == 2
-                    assert readings[0].date == datetime(2026, 1, 1, tzinfo=UTC)
+                    assert readings[0].date == datetime(2026, 1, 1, 8, 0, tzinfo=UTC)
                     assert readings[0].consumption == 25.5
                     assert readings[0].unit == "kWh"
-                    assert readings[1].date == datetime(2026, 1, 2, tzinfo=UTC)
+                    assert readings[1].date == datetime(2026, 1, 2, 8, 0, tzinfo=UTC)
                     assert readings[1].consumption == 28.3
 
     async def test_get_usage_default_dates(
@@ -467,7 +467,7 @@ class TestMyTPUClient:
 
                     # Only the D entry should be returned; M entries are filtered
                     assert len(readings) == 1
-                    assert readings[0].date == datetime(2026, 1, 1, tzinfo=UTC)
+                    assert readings[0].date == datetime(2026, 1, 1, 8, 0, tzinfo=UTC)
                     assert readings[0].consumption == 25.5
 
     async def test_async_login(self):

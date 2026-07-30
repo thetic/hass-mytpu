@@ -37,7 +37,7 @@ class TestUsageReading:
         }
         reading = UsageReading.from_api_response(data)
 
-        assert reading.date == datetime(2026, 1, 15, tzinfo=UTC)
+        assert reading.date == datetime(2026, 1, 15, 8, 0, tzinfo=UTC)
         assert reading.consumption == 25.5
         assert reading.unit == "kWh"
         assert reading.high_temp == 45.0
@@ -51,7 +51,7 @@ class TestUsageReading:
         }
         reading = UsageReading.from_api_response(data)
 
-        assert reading.date == datetime(2026, 1, 15, tzinfo=UTC)
+        assert reading.date == datetime(2026, 1, 15, 8, 0, tzinfo=UTC)
         assert reading.consumption == 0.0
         assert reading.unit == ""
         assert reading.high_temp is None
@@ -103,6 +103,18 @@ class TestUsageReading:
 
         assert reading.consumption == 0.0
         assert reading.unit == "CCF"
+
+    def test_date_pst_converts_to_utc(self):
+        """Test that a date in PST (UTC-8) is stored as midnight+8h UTC."""
+        data = {"usageDate": "2025-02-16"}  # February is PST (UTC-8)
+        reading = UsageReading.from_api_response(data)
+        assert reading.date == datetime(2025, 2, 16, 8, 0, tzinfo=UTC)
+
+    def test_date_pdt_converts_to_utc(self):
+        """Test that a date in PDT (UTC-7) is stored as midnight+7h UTC."""
+        data = {"usageDate": "2025-07-15"}  # July is PDT (UTC-7)
+        reading = UsageReading.from_api_response(data)
+        assert reading.date == datetime(2025, 7, 15, 7, 0, tzinfo=UTC)
 
 
 class TestService:
